@@ -145,6 +145,7 @@
     </div>
     <div class="keypad" id="keypad"></div>
     <div class="login-error" id="loginError"></div>
+    <button class="btn-secondary" id="forgotPinLink" style="margin-top:20px; background:transparent; color:#8888a0; text-decoration:underline; font-size:13px;">PIN மறந்துடுச்சா?</button>
   </div>
 </div>
 
@@ -305,7 +306,8 @@
     </div>
     <div class="keypad" id="folderPinKeypad"></div>
     <div class="login-error" id="folderPinError"></div>
-    <button class="btn-secondary" id="folderPinBackBtn" style="margin-top:24px;">← Home-க்கு போ</button>
+    <button class="btn-secondary" id="folderPinForgotLink" style="margin-top:16px; background:transparent; color:#8888a0; text-decoration:underline; font-size:13px;">Folder PIN மறந்துடுச்சா?</button>
+    <button class="btn-secondary" id="folderPinBackBtn" style="margin-top:10px;">← Home-க்கு போ</button>
   </div>
 </div>
 
@@ -392,6 +394,33 @@
     <p style="font-size:13.5px;color:#9999b0;" id="restoreConfirmText">இப்போ இருக்கும் எல்லா folders/files-உம் replace ஆகிடும். இது undo செய்ய முடியாது.</p>
     <button class="btn-primary" id="confirmRestoreBtn">Restore பண்ணு</button>
     <button class="btn-secondary" id="cancelRestoreBtn">Cancel</button>
+  </div>
+</div>
+
+<!-- Master PIN recovery sheet -->
+<div class="sheet-overlay" id="forgotPinSheetOverlay">
+  <div class="sheet">
+    <h3>PIN Recovery</h3>
+    <div class="field-label">Secret recovery code</div>
+    <input class="field-input" id="recoveryCodeInput" placeholder="Recovery code">
+    <div class="field-label">புது 4-digit PIN</div>
+    <input class="field-input" id="recoveryNewPinInput" maxlength="4" inputmode="numeric" placeholder="0000">
+    <button class="btn-primary" id="confirmRecoveryBtn">PIN Reset பண்ணு</button>
+    <button class="btn-secondary" id="cancelRecoveryBtn">Cancel</button>
+    <div class="login-error" id="recoveryError" style="margin-top:10px;"></div>
+  </div>
+</div>
+
+<!-- Folder PIN forgot - use master PIN sheet -->
+<div class="sheet-overlay" id="folderPinForgotSheetOverlay">
+  <div class="sheet">
+    <h3>Folder PIN மறந்துடுச்சா?</h3>
+    <p style="font-size:13.5px;color:#9999b0;">Master PIN தெரிஞ்சா, அதை வச்சு இந்த folder-ஐ open பண்ணலாம்.</p>
+    <div class="field-label">Master PIN</div>
+    <input class="field-input" id="masterPinForFolderInput" maxlength="4" inputmode="numeric" placeholder="0000">
+    <button class="btn-primary" id="confirmMasterPinForFolderBtn">Open பண்ணு</button>
+    <button class="btn-secondary" id="cancelMasterPinForFolderBtn">Cancel</button>
+    <div class="login-error" id="masterPinForFolderError" style="margin-top:10px;"></div>
   </div>
 </div>
 

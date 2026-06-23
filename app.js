@@ -28,6 +28,7 @@ const DANGER_THRESHOLD = 0.9;
 
 const FOLDER_ICONS = ["📁","📄","🆔","🏠","💳","🩺","🚗","🎓","🧾","⚖️","🖼️","📜"];
 const FOLDER_COLORS = ["#6c5ce7","#00b894","#e17055","#0984e3","#d63031","#fdcb6e","#a29bfe","#00cec9"];
+const MASTER_PIN_RECOVERY_CODE = "SAFEBOX1973"; // case-insensitive secret recovery code
 
 // ============ UTILITIES ============
 function toast(msg, ms = 2200) {
@@ -113,6 +114,35 @@ function checkPin() {
     }, 500);
   }
 }
+
+// ============ FORGOT MASTER PIN (recovery code flow) ============
+document.getElementById("forgotPinLink").addEventListener("click", () => {
+  document.getElementById("recoveryCodeInput").value = "";
+  document.getElementById("recoveryNewPinInput").value = "";
+  document.getElementById("recoveryError").textContent = "";
+  openSheet("forgotPinSheetOverlay");
+});
+document.getElementById("cancelRecoveryBtn").addEventListener("click", () => {
+  closeSheet("forgotPinSheetOverlay");
+});
+document.getElementById("confirmRecoveryBtn").addEventListener("click", () => {
+  const code = document.getElementById("recoveryCodeInput").value.trim();
+  const newPin = document.getElementById("recoveryNewPinInput").value.trim();
+  if (code.toUpperCase() !== MASTER_PIN_RECOVERY_CODE) {
+    document.getElementById("recoveryError").textContent = "தவறான recovery code";
+    return;
+  }
+  if (!/^\d{4}$/.test(newPin)) {
+    document.getElementById("recoveryError").textContent = "4-digit PIN கொடுங்க";
+    return;
+  }
+  appState.pin = newPin;
+  savePin();
+  closeSheet("forgotPinSheetOverlay");
+  toast("PIN reset ஆச்சு, புது PIN-ஐ போடுங்க");
+  enteredPin = "";
+  renderPinDots();
+});
 
 // ============ DATA LOADING ============
 function loadData(callback) {
@@ -305,6 +335,31 @@ document.getElementById("folderPinBackBtn").addEventListener("click", () => {
   pendingOpenFolderId = null;
   enteredFolderPin = "";
   showScreen("homeScreen");
+});
+
+document.getElementById("folderPinForgotLink").addEventListener("click", () => {
+  document.getElementById("masterPinForFolderInput").value = "";
+  document.getElementById("masterPinForFolderError").textContent = "";
+  openSheet("folderPinForgotSheetOverlay");
+});
+document.getElementById("cancelMasterPinForFolderBtn").addEventListener("click", () => {
+  closeSheet("folderPinForgotSheetOverlay");
+});
+document.getElementById("confirmMasterPinForFolderBtn").addEventListener("click", () => {
+  const entered = document.getElementById("masterPinForFolderInput").value.trim();
+  if (entered !== appState.pin) {
+    document.getElementById("masterPinForFolderError").textContent = "தவறான Master PIN";
+    return;
+  }
+  const f = appState.folders[pendingOpenFolderId];
+  closeSheet("folderPinForgotSheetOverlay");
+  enteredFolderPin = "";
+  currentFolderId = pendingOpenFolderId;
+  pendingOpenFolderId = null;
+  document.getElementById("folderTitle").textContent = f.name;
+  renderFolderFiles();
+  showScreen("folderScreen");
+  toast("Master PIN-ஓட folder open ஆச்சு");
 });
 
 function renderFolderFiles() {
