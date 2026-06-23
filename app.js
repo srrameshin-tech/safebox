@@ -358,16 +358,17 @@ document.getElementById("vaMove").addEventListener("click", () => {
 
 document.getElementById("vaShare").addEventListener("click", () => {
   const code = genCode();
+  const linkToken = genLinkToken();
   const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
   const fileIdAtShareTime = currentViewerFileId;
-  // Write directly to this share's path only (not the whole shares tree) to avoid clobbering other shares
-  db.ref(ROOT + "/shares/" + code).set({ fileId: fileIdAtShareTime, expiresAt })
+  // Store under the link token (not the code) - code is verified client-side after link is opened
+  db.ref(ROOT + "/shares/" + linkToken).set({ fileId: fileIdAtShareTime, code, expiresAt })
     .then(() => {
-      appState.shares[code] = { fileId: fileIdAtShareTime, expiresAt };
+      appState.shares[linkToken] = { fileId: fileIdAtShareTime, code, expiresAt };
       document.getElementById("shareCodeDisplay").textContent = code;
       document.getElementById("shareExpiryText").textContent = "24 மணி நேரத்துக்கு valid";
       document.getElementById("copyShareCodeBtn").dataset.code = code;
-      document.getElementById("copyShareLinkBtn").dataset.code = code;
+      document.getElementById("copyShareLinkBtn").dataset.token = linkToken;
       openSheet("shareSheetOverlay");
     })
     .catch(err => {
@@ -375,6 +376,12 @@ document.getElementById("vaShare").addEventListener("click", () => {
       toast("Share code create ஆகல, மறுபடி try பண்ணுங்க");
     });
 });
+function genLinkToken() {
+  const chars = "abcdefghijkmnpqrstuvwxyz23456789"; // no 0/o/1/l ambiguity
+  let t = "";
+  for (let i = 0; i < 8; i++) t += chars[Math.floor(Math.random() * chars.length)];
+  return t;
+}
 document.getElementById("copyShareCodeBtn").addEventListener("click", e => {
   const code = e.target.dataset.code;
   if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -384,10 +391,10 @@ document.getElementById("copyShareCodeBtn").addEventListener("click", e => {
   }
 });
 document.getElementById("copyShareLinkBtn").addEventListener("click", e => {
-  const code = e.target.dataset.code;
-  const link = `${location.origin}${location.pathname}?share=${code}`;
+  const token = e.target.dataset.token;
+  const link = `${location.origin}${location.pathname}?s=${token}`;
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(link).then(() => toast("Link copy ஆச்சு")).catch(() => toast("Link: " + link));
+    navigator.clipboard.writeText(link).then(() => toast("Link copy ஆச்சு (code தனியா சொல்லுங்க)")).catch(() => toast("Link: " + link));
   } else {
     toast("Link: " + link);
   }
@@ -660,12 +667,11 @@ let enteredShareCode = "";
 
 function checkIncomingShareLink() {
   const params = new URLSearchParams(location.search);
-  const code = params.get("share");
-  if (!code) return false;
+  const token = params.get("s") || params.get("share"); // support old links too during transition
+  if (!token) return false;
 
-  const share = appState.shares[code];
+  const share = appState.shares[token];
   if (!share || share.expiresAt < Date.now()) {
-    // Show an expired/invalid message on the share-access screen itself
     showScreen("shareAccessScreen");
     document.getElementById("shareAccessSub").textContent = "இந்த link expire ஆகிடுச்சு அல்லது invalid";
     document.querySelectorAll("#shareAccessKeypad .key").forEach(b => b.style.visibility = "hidden");
@@ -679,9 +685,9 @@ function checkIncomingShareLink() {
     return true;
   }
 
-  // Valid share - require the code to be typed before revealing
+  // share.code may be missing on very old links created before this update - fall back to requiring the token itself
   pendingShareFile = f;
-  pendingShareCode = code;
+  pendingShareCode = share.code || token;
   enteredShareCode = "";
   buildShareAccessKeypad();
   renderShareAccessDots();
