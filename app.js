@@ -849,6 +849,15 @@ document.querySelectorAll(".sheet-overlay").forEach(ov => {
 // Register service worker
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
+    navigator.serviceWorker.register("sw.js").then(reg => {
+      // If a new SW takes control, reload once to get fresh assets
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (!window._swReloaded) {
+          window._swReloaded = true;
+          location.reload();
+        }
+      });
+      reg.update();
+    }).catch(() => {});
   });
 }
