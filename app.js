@@ -792,12 +792,26 @@ function compressImage(file, maxDim, quality, cb) {
 }
 
 function handleDocUpload(file) {
-  const maxSize = 6 * 1024 * 1024; // 6MB cap for docs
+  const maxSize = 6 * 1024 * 1024; // 6MB hard cap for docs
+  const warnSize = 2 * 1024 * 1024; // 2MB - suggest compressing above this
   if (file.size > maxSize) {
     toast("File 6MB-க்கு மேல இருக்கு, compress பண்ணி try பண்ணுங்க");
     closeSheet("uploadSheetOverlay");
     return;
   }
+  if (file.size > warnSize) {
+    pendingLargeDocFile = file;
+    document.getElementById("largeDocSizeText").textContent =
+      `இந்த file ${formatBytes(file.size)} இருக்கு. பெரிய files storage-ஐ வேகமா consume பண்ணும். Compress பண்ணி upload பண்ணுவது நல்லது (free online tools: smallpdf.com, ilovepdf.com).`;
+    closeSheet("uploadSheetOverlay");
+    openSheet("largeDocWarnOverlay");
+    return;
+  }
+  proceedDocUpload(file);
+}
+
+let pendingLargeDocFile = null;
+function proceedDocUpload(file) {
   showUploadProgress("Document upload ஆகுது...");
   const isImage = file.type.startsWith("image/");
   const reader = new FileReader();
@@ -806,6 +820,18 @@ function handleDocUpload(file) {
   };
   reader.readAsDataURL(file);
 }
+document.getElementById("uploadAnywayBtn").addEventListener("click", () => {
+  closeSheet("largeDocWarnOverlay");
+  if (pendingLargeDocFile) {
+    openSheet("uploadSheetOverlay"); // briefly reopen to show progress stage cleanly
+    proceedDocUpload(pendingLargeDocFile);
+    pendingLargeDocFile = null;
+  }
+});
+document.getElementById("cancelLargeDocBtn").addEventListener("click", () => {
+  closeSheet("largeDocWarnOverlay");
+  pendingLargeDocFile = null;
+});
 
 function finalizeUpload(name, type, dataUrl, sizeBytes) {
   const used = computeUsedBytes();
