@@ -271,6 +271,17 @@
   </div>
 </div>
 
+<!-- Share expiry selection sheet -->
+<div class="sheet-overlay" id="shareExpirySheetOverlay">
+  <div class="sheet">
+    <h3>எவ்வளவு நேரம் valid?</h3>
+    <div class="sheet-row" data-hours="1"><span class="sricon">⏱️</span><span>1 மணி நேரம்</span></div>
+    <div class="sheet-row" data-hours="6"><span class="sricon">⏱️</span><span>6 மணி நேரம்</span></div>
+    <div class="sheet-row" data-hours="24"><span class="sricon">⏱️</span><span>24 மணி நேரம் (1 நாள்)</span></div>
+    <div class="sheet-row" data-hours="168"><span class="sricon">⏱️</span><span>7 நாட்கள்</span></div>
+  </div>
+</div>
+
 <!-- Share sheet -->
 <div class="sheet-overlay" id="shareSheetOverlay">
   <div class="sheet">
@@ -310,8 +321,10 @@
     <h3>Settings</h3>
     <div class="sheet-row" id="changePinRow"><span class="sricon">🔑</span><span>PIN மாற்று</span></div>
     <div class="sheet-row" id="exportBackupRow"><span class="sricon">💾</span><span>Backup Export (JSON)</span></div>
+    <div class="sheet-row" id="restoreBackupRow"><span class="sricon">📥</span><span>Backup Restore (JSON)</span></div>
     <div class="sheet-row danger" id="closeSettingsRow"><span class="sricon">✖️</span><span>Close</span></div>
   </div>
+  <input type="file" id="restoreFileInput" accept="application/json">
 </div>
 
 <!-- Change PIN sheet -->
@@ -331,6 +344,16 @@
     <p style="font-size:13.5px;color:#9999b0;" id="deleteConfirmText">இது நிரந்தரமா delete ஆகிடும்.</p>
     <button class="btn-primary" style="background:#e74c3c;" id="confirmDeleteBtn">Delete</button>
     <button class="btn-secondary" id="cancelDeleteBtn">Cancel</button>
+  </div>
+</div>
+
+<!-- Restore confirm sheet -->
+<div class="sheet-overlay" id="restoreConfirmOverlay">
+  <div class="sheet">
+    <h3>Restore பண்ணலாமா?</h3>
+    <p style="font-size:13.5px;color:#9999b0;" id="restoreConfirmText">இப்போ இருக்கும் எல்லா folders/files-உம் replace ஆகிடும். இது undo செய்ய முடியாது.</p>
+    <button class="btn-primary" id="confirmRestoreBtn">Restore பண்ணு</button>
+    <button class="btn-secondary" id="cancelRestoreBtn">Cancel</button>
   </div>
 </div>
 

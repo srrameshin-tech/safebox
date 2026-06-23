@@ -357,16 +357,27 @@ document.getElementById("vaMove").addEventListener("click", () => {
 });
 
 document.getElementById("vaShare").addEventListener("click", () => {
+  openSheet("shareExpirySheetOverlay");
+});
+
+document.querySelectorAll("#shareExpirySheetOverlay .sheet-row").forEach(row => {
+  row.addEventListener("click", () => {
+    const hours = parseInt(row.dataset.hours, 10);
+    closeSheet("shareExpirySheetOverlay");
+    createShareWithExpiry(hours);
+  });
+});
+
+function createShareWithExpiry(hours) {
   const code = genCode();
   const linkToken = genLinkToken();
-  const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
+  const expiresAt = Date.now() + hours * 60 * 60 * 1000;
   const fileIdAtShareTime = currentViewerFileId;
-  // Store under the link token (not the code) - code is verified client-side after link is opened
   db.ref(ROOT + "/shares/" + linkToken).set({ fileId: fileIdAtShareTime, code, expiresAt })
     .then(() => {
       appState.shares[linkToken] = { fileId: fileIdAtShareTime, code, expiresAt };
       document.getElementById("shareCodeDisplay").textContent = code;
-      document.getElementById("shareExpiryText").textContent = "24 மணி நேரத்துக்கு valid";
+      document.getElementById("shareExpiryText").textContent = formatExpiryLabel(hours) + "க்கு valid";
       document.getElementById("copyShareCodeBtn").dataset.code = code;
       document.getElementById("copyShareLinkBtn").dataset.token = linkToken;
       openSheet("shareSheetOverlay");
@@ -375,7 +386,16 @@ document.getElementById("vaShare").addEventListener("click", () => {
       console.error("Share save failed:", err);
       toast("Share code create ஆகல, மறுபடி try பண்ணுங்க");
     });
-});
+}
+
+function formatExpiryLabel(hours) {
+  if (hours === 1) return "1 மணி நேரம்";
+  if (hours === 6) return "6 மணி நேரம்";
+  if (hours === 24) return "24 மணி நேரம்";
+  if (hours === 168) return "7 நாட்கள்";
+  return hours + " மணி நேரம்";
+}
+
 function genLinkToken() {
   const chars = "abcdefghijkmnpqrstuvwxyz23456789"; // no 0/o/1/l ambiguity
   let t = "";
@@ -646,6 +666,60 @@ document.getElementById("exportBackupRow").addEventListener("click", () => {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
   toast("Backup download ஆச்சு");
+});
+
+let pendingRestoreData = null;
+document.getElementById("restoreBackupRow").addEventListener("click", () => {
+  closeSheet("settingsSheetOverlay");
+  document.getElementById("restoreFileInput").click();
+});
+document.getElementById("restoreFileInput").addEventListener("change", e => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (!data || typeof data !== "object") throw new Error("invalid");
+      pendingRestoreData = data;
+      const folderCount = data.folders ? Object.keys(data.folders).length : 0;
+      const fileCount = data.files ? Object.keys(data.files).length : 0;
+      document.getElementById("restoreConfirmText").textContent =
+        `இந்த backup-ல ${folderCount} folders, ${fileCount} files இருக்கு. இப்போ இருக்கும் டேட்டா எல்லாம் இதனால replace ஆகிடும்.`;
+      openSheet("restoreConfirmOverlay");
+    } catch (err) {
+      toast("இந்த file சரியான SafeBox backup இல்ல");
+    }
+  };
+  reader.readAsText(file);
+});
+document.getElementById("confirmRestoreBtn").addEventListener("click", () => {
+  if (!pendingRestoreData) { closeSheet("restoreConfirmOverlay"); return; }
+  const data = pendingRestoreData;
+  const newState = {
+    pin: data.pin || appState.pin,
+    folders: data.folders || {},
+    files: data.files || {},
+    shares: data.shares || {}
+  };
+  db.ref(ROOT).set(newState)
+    .then(() => {
+      appState = newState;
+      closeSheet("restoreConfirmOverlay");
+      pendingRestoreData = null;
+      showScreen("homeScreen");
+      renderHome();
+      toast("Restore ஆச்சு ✓");
+    })
+    .catch(err => {
+      console.error(err);
+      toast("Restore ஆகல, மறுபடி try பண்ணுங்க");
+    });
+});
+document.getElementById("cancelRestoreBtn").addEventListener("click", () => {
+  pendingRestoreData = null;
+  closeSheet("restoreConfirmOverlay");
 });
 
 document.getElementById("lockBtn").addEventListener("click", () => {
