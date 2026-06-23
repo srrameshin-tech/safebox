@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>SafeBox</title>
+<meta name="theme-color" content="#1a1a2e">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow-x: hidden; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0f0f1a;
+    color: #eaeaf0;
+    min-height: 100vh;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .screen { display: none; min-height: 100vh; }
+  .screen.active { display: flex; flex-direction: column; }
+
+  /* ===== LOGIN ===== */
+  #loginScreen { align-items: center; justify-content: center; padding: 24px; background: linear-gradient(160deg, #1a1a2e 0%, #0f0f1a 60%); }
+  .login-box { width: 100%; max-width: 340px; text-align: center; }
+  .lock-icon { font-size: 56px; margin-bottom: 8px; }
+  .login-box h1 { font-size: 26px; font-weight: 700; margin-bottom: 4px; letter-spacing: 0.5px; }
+  .login-box p.sub { color: #8888a0; font-size: 13px; margin-bottom: 32px; }
+  .pin-dots { display: flex; justify-content: center; gap: 14px; margin-bottom: 28px; }
+  .pin-dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #4a4a6a; transition: 0.15s; }
+  .pin-dot.filled { background: #6c5ce7; border-color: #6c5ce7; }
+  .pin-dot.error { border-color: #e74c3c; background: #e74c3c; }
+  .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; max-width: 280px; margin: 0 auto; }
+  .key { aspect-ratio: 1; border-radius: 50%; background: #1f1f33; border: 1px solid #2a2a42; color: #eaeaf0; font-size: 22px; font-weight: 500; display: flex; align-items: center; justify-content: center; }
+  .key:active { background: #2a2a48; }
+  .key.empty { background: transparent; border: none; }
+  .login-error { color: #e74c3c; font-size: 13px; margin-top: 14px; min-height: 18px; }
+
+  /* ===== APP BAR ===== */
+  .appbar { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: #15152a; position: sticky; top: 0; z-index: 50; border-bottom: 1px solid #232340; }
+  .appbar h2 { font-size: 17px; font-weight: 600; flex: 1; }
+  .icon-btn { background: none; border: none; color: #eaeaf0; font-size: 20px; padding: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .back-btn { font-size: 22px; }
+
+  /* ===== HOME / FOLDERS ===== */
+  #homeScreen { background: #0f0f1a; }
+  .storage-meter { margin: 14px 16px 6px; background: #15152a; border-radius: 14px; padding: 14px 16px; border: 1px solid #232340; }
+  .storage-meter .row { display: flex; justify-content: space-between; font-size: 12px; color: #9999b0; margin-bottom: 8px; }
+  .storage-bar-bg { height: 7px; border-radius: 4px; background: #232340; overflow: hidden; }
+  .storage-bar-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #6c5ce7, #a29bfe); transition: width 0.3s; }
+  .storage-warning { font-size: 11.5px; color: #f1c40f; margin-top: 8px; display: none; }
+  .storage-warning.show { display: block; }
+  .storage-warning.danger { color: #e74c3c; }
+
+  .search-bar { margin: 14px 16px; position: relative; }
+  .search-bar input { width: 100%; padding: 12px 16px 12px 40px; border-radius: 12px; border: 1px solid #232340; background: #15152a; color: #eaeaf0; font-size: 15px; outline: none; }
+  .search-bar .sicon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #6666800; opacity: 0.6; font-size: 16px; }
+
+  .section-label { font-size: 12px; color: #8888a0; text-transform: uppercase; letter-spacing: 0.5px; margin: 18px 16px 8px; font-weight: 600; }
+  .folder-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; padding: 0 16px; }
+  .folder-card { background: #15152a; border: 1px solid #232340; border-radius: 16px; padding: 18px 14px; display: flex; flex-direction: column; gap: 8px; position: relative; }
+  .folder-card .ficon { font-size: 26px; }
+  .folder-card .fname { font-size: 14.5px; font-weight: 600; }
+  .folder-card .fcount { font-size: 12px; color: #8888a0; }
+  .folder-card .fcolor { position: absolute; top: 0; left: 0; right: 0; height: 4px; border-radius: 16px 16px 0 0; }
+  .add-folder-card { background: transparent; border: 1.5px dashed #2e2e4a; border-radius: 16px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 6px; color: #6c5ce7; font-size: 13px; min-height: 92px; }
+
+  .fab { position: fixed; bottom: 26px; right: 20px; width: 58px; height: 58px; border-radius: 50%; background: #6c5ce7; color: #fff; font-size: 28px; border: none; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 18px rgba(108,92,231,0.5); z-index: 40; }
+  .fab:active { background: #5b4bd1; }
+
+  /* ===== FOLDER VIEW (grid of files) ===== */
+  .file-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 12px 16px 90px; }
+  .file-tile { aspect-ratio: 1; border-radius: 12px; background: #1a1a30; overflow: hidden; position: relative; border: 1px solid #232340; }
+  .file-tile img { width: 100%; height: 100%; object-fit: cover; }
+  .file-tile.doc-tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 6px; }
+  .file-tile.doc-tile .dicon { font-size: 28px; }
+  .file-tile.doc-tile .dname { font-size: 9.5px; color: #b0b0c5; text-align: center; word-break: break-word; line-height: 1.2; max-height: 2.4em; overflow: hidden; }
+  .empty-state { text-align: center; padding: 60px 30px; color: #6666800; opacity: 0.7; }
+  .empty-state .eicon { font-size: 44px; margin-bottom: 10px; }
+  .empty-state p { font-size: 14px; color: #8888a0; }
+
+  /* ===== VIEWER ===== */
+  #viewerScreen { background: #000; }
+  .viewer-top { display: flex; align-items: center; padding: 12px 14px; gap: 10px; background: rgba(0,0,0,0.6); position: absolute; top: 0; left: 0; right: 0; z-index: 10; }
+  .viewer-top .fname-top { flex: 1; font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .viewer-body { flex: 1; display: flex; align-items: center; justify-content: center; padding: 60px 0 90px; }
+  .viewer-body img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .viewer-body .doc-preview { text-align: center; color: #ccc; padding: 30px; }
+  .viewer-body .doc-preview .bigicon { font-size: 70px; margin-bottom: 16px; }
+  .viewer-actions { position: absolute; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-around; padding: 16px 10px calc(16px + env(safe-area-inset-bottom)); background: rgba(0,0,0,0.7); }
+  .vaction { display: flex; flex-direction: column; align-items: center; gap: 5px; color: #eaeaf0; background: none; border: none; font-size: 11px; }
+  .vaction .vicon { font-size: 22px; }
+
+  /* ===== MODALS / SHEETS ===== */
+  .sheet-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: none; align-items: flex-end; z-index: 100; }
+  .sheet-overlay.active { display: flex; }
+  .sheet { background: #181830; width: 100%; border-radius: 22px 22px 0 0; padding: 20px 20px calc(24px + env(safe-area-inset-bottom)); max-height: 85vh; overflow-y: auto; }
+  .sheet h3 { font-size: 17px; margin-bottom: 16px; font-weight: 600; }
+  .sheet-row { display: flex; align-items: center; gap: 14px; padding: 13px 4px; border-bottom: 1px solid #232340; font-size: 15px; }
+  .sheet-row:last-child { border-bottom: none; }
+  .sheet-row .sricon { font-size: 19px; width: 22px; text-align: center; }
+  .sheet-row.danger { color: #e74c3c; }
+  .field-label { font-size: 12.5px; color: #9999b0; margin: 14px 0 6px; }
+  .field-input { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid #2e2e4a; background: #11111f; color: #eaeaf0; font-size: 15px; outline: none; }
+  .btn-primary { width: 100%; padding: 13px; border-radius: 12px; background: #6c5ce7; color: #fff; border: none; font-size: 15px; font-weight: 600; margin-top: 18px; }
+  .btn-secondary { width: 100%; padding: 13px; border-radius: 12px; background: #232340; color: #eaeaf0; border: none; font-size: 15px; font-weight: 500; margin-top: 10px; }
+  .color-pick-row { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+  .color-dot { width: 30px; height: 30px; border-radius: 50%; border: 2px solid transparent; }
+  .color-dot.selected { border-color: #fff; }
+  .icon-pick-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .icon-pick { width: 42px; height: 42px; border-radius: 10px; background: #11111f; border: 1px solid #2e2e4a; display: flex; align-items: center; justify-content: center; font-size: 19px; }
+  .icon-pick.selected { border-color: #6c5ce7; background: #232050; }
+
+  .share-code-box { background: #11111f; border: 1px dashed #6c5ce7; border-radius: 14px; padding: 22px; text-align: center; margin: 16px 0; }
+  .share-code-box .code { font-size: 32px; font-weight: 700; letter-spacing: 4px; color: #a29bfe; margin: 8px 0; }
+  .share-code-box .expiry { font-size: 12px; color: #8888a0; }
+
+  .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #232340; color: #eaeaf0; padding: 11px 20px; border-radius: 30px; font-size: 13.5px; z-index: 200; display: none; box-shadow: 0 4px 14px rgba(0,0,0,0.4); white-space: nowrap; }
+  .toast.show { display: block; animation: fadein 0.2s; }
+  @keyframes fadein { from { opacity: 0; transform: translateX(-50%) translateY(8px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+
+  .upload-progress { padding: 16px; text-align: center; }
+  .spinner { width: 34px; height: 34px; border: 3px solid #2e2e4a; border-top-color: #6c5ce7; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  input[type=file] { display: none; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- ===================== LOGIN SCREEN ===================== -->
+<div id="loginScreen" class="screen active">
+  <div class="login-box">
+    <div class="lock-icon">🔒</div>
+    <h1>SafeBox</h1>
+    <p class="sub" id="loginSub">PIN-ஐ உள்ளிடவும்</p>
+    <div class="pin-dots" id="pinDots">
+      <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+    </div>
+    <div class="keypad" id="keypad"></div>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
+<!-- ===================== HOME SCREEN ===================== -->
+<div id="homeScreen" class="screen">
+  <div class="appbar">
+    <h2>SafeBox</h2>
+    <button class="icon-btn" id="settingsBtn">⚙️</button>
+    <button class="icon-btn" id="lockBtn">🔒</button>
+  </div>
+
+  <div class="storage-meter">
+    <div class="row"><span>Storage used</span><span id="storageText">0 KB / 1 GB</span></div>
+    <div class="storage-bar-bg"><div class="storage-bar-fill" id="storageBarFill" style="width:0%"></div></div>
+    <div class="storage-warning" id="storageWarning">⚠️ Free limit கிட்ட வருது — தேவை இல்லாத files-ஐ delete பண்ணுங்க.</div>
+  </div>
+
+  <div class="search-bar">
+    <span class="sicon">🔍</span>
+    <input type="text" id="searchInput" placeholder="Search photos & documents...">
+  </div>
+
+  <div id="searchResultsWrap" class="hidden">
+    <div class="section-label">Search Results</div>
+    <div class="file-grid" id="searchResultsGrid"></div>
+  </div>
+
+  <div id="folderViewWrap">
+    <div class="section-label">Folders</div>
+    <div class="folder-grid" id="folderGrid"></div>
+  </div>
+
+  <button class="fab" id="fabUpload">+</button>
+</div>
+
+<!-- ===================== FOLDER DETAIL SCREEN ===================== -->
+<div id="folderScreen" class="screen">
+  <div class="appbar">
+    <button class="icon-btn back-btn" id="folderBackBtn">←</button>
+    <h2 id="folderTitle">Folder</h2>
+    <button class="icon-btn" id="folderMenuBtn">⋮</button>
+  </div>
+  <div id="folderFileGridWrap">
+    <div class="file-grid" id="folderFileGrid"></div>
+  </div>
+  <button class="fab" id="fabUploadInFolder">+</button>
+</div>
+
+<!-- ===================== VIEWER SCREEN ===================== -->
+<div id="viewerScreen" class="screen">
+  <div class="viewer-top">
+    <button class="icon-btn back-btn" id="viewerBackBtn">←</button>
+    <span class="fname-top" id="viewerFname">file</span>
+  </div>
+  <div class="viewer-body" id="viewerBody"></div>
+  <div class="viewer-actions">
+    <button class="vaction" id="vaShare"><span class="vicon">🔗</span>Share</button>
+    <button class="vaction" id="vaRename"><span class="vicon">✏️</span>Rename</button>
+    <button class="vaction" id="vaMove"><span class="vicon">📁</span>Move</button>
+    <button class="vaction" id="vaDelete"><span class="vicon">🗑️</span>Delete</button>
+  </div>
+</div>
+
+<!-- ===================== SHEETS (Bottom modals) ===================== -->
+
+<!-- Upload sheet -->
+<div class="sheet-overlay" id="uploadSheetOverlay">
+  <div class="sheet">
+    <h3>Upload</h3>
+    <div id="uploadChooseStage">
+      <div class="sheet-row" id="chooseFolderRow"><span class="sricon">📁</span><span id="chooseFolderLabel">Folder: Photos</span></div>
+      <div class="sheet-row" id="pickPhotoRow"><span class="sricon">🖼️</span><span>Photo எடு / Choose Photo</span></div>
+      <div class="sheet-row" id="pickDocRow"><span class="sricon">📄</span><span>Document தேர்வு செய்</span></div>
+    </div>
+    <div id="uploadProgressStage" class="upload-progress hidden">
+      <div class="spinner"></div>
+      <p id="uploadProgressText">Uploading...</p>
+    </div>
+    <input type="file" id="filePhotoInput" accept="image/*">
+    <input type="file" id="fileDocInput" accept=".pdf,.doc,.docx,.txt,image/*">
+  </div>
+</div>
+
+<!-- New folder sheet -->
+<div class="sheet-overlay" id="newFolderSheetOverlay">
+  <div class="sheet">
+    <h3>புது Folder</h3>
+    <div class="field-label">Folder பெயர்</div>
+    <input class="field-input" id="newFolderName" placeholder="e.g. Bank Documents">
+    <div class="field-label">Icon தேர்வு செய்</div>
+    <div class="icon-pick-row" id="iconPickRow"></div>
+    <div class="field-label">Color தேர்வு செய்</div>
+    <div class="color-pick-row" id="colorPickRow"></div>
+    <button class="btn-primary" id="createFolderBtn">Create Folder</button>
+  </div>
+</div>
+
+<!-- Folder menu sheet (rename/delete folder) -->
+<div class="sheet-overlay" id="folderMenuSheetOverlay">
+  <div class="sheet">
+    <h3 id="folderMenuTitle">Folder</h3>
+    <div class="sheet-row" id="renameFolderRow"><span class="sricon">✏️</span><span>Folder பெயர் மாற்று</span></div>
+    <div class="sheet-row danger" id="deleteFolderRow"><span class="sricon">🗑️</span><span>Folder Delete பண்ணு</span></div>
+  </div>
+</div>
+
+<!-- Share sheet -->
+<div class="sheet-overlay" id="shareSheetOverlay">
+  <div class="sheet">
+    <h3>Share Code</h3>
+    <p style="font-size:13px;color:#9999b0;">இந்த code-ஐ அனுப்புங்க, அவங்க இந்த ஒரு file மட்டும் பார்க்க முடியும்.</p>
+    <div class="share-code-box">
+      <div style="font-size:12px;color:#8888a0;">Access Code</div>
+      <div class="code" id="shareCodeDisplay">----</div>
+      <div class="expiry" id="shareExpiryText">24 மணி நேரத்துக்கு valid</div>
+    </div>
+    <button class="btn-primary" id="copyShareCodeBtn">Code Copy பண்ணு</button>
+    <button class="btn-secondary" id="copyShareLinkBtn">Link Copy பண்ணு</button>
+    <button class="btn-secondary" id="closeShareSheetBtn">Close</button>
+  </div>
+</div>
+
+<!-- Rename sheet -->
+<div class="sheet-overlay" id="renameSheetOverlay">
+  <div class="sheet">
+    <h3>பெயர் மாற்று</h3>
+    <input class="field-input" id="renameInput" placeholder="File name">
+    <button class="btn-primary" id="confirmRenameBtn">Save</button>
+  </div>
+</div>
+
+<!-- Move sheet -->
+<div class="sheet-overlay" id="moveSheetOverlay">
+  <div class="sheet">
+    <h3>Move to Folder</h3>
+    <div id="moveFolderList"></div>
+  </div>
+</div>
+
+<!-- Settings sheet -->
+<div class="sheet-overlay" id="settingsSheetOverlay">
+  <div class="sheet">
+    <h3>Settings</h3>
+    <div class="sheet-row" id="changePinRow"><span class="sricon">🔑</span><span>PIN மாற்று</span></div>
+    <div class="sheet-row" id="exportBackupRow"><span class="sricon">💾</span><span>Backup Export (JSON)</span></div>
+    <div class="sheet-row danger" id="closeSettingsRow"><span class="sricon">✖️</span><span>Close</span></div>
+  </div>
+</div>
+
+<!-- Change PIN sheet -->
+<div class="sheet-overlay" id="changePinSheetOverlay">
+  <div class="sheet">
+    <h3>புது PIN வைக்க</h3>
+    <div class="field-label">புது 4-digit PIN</div>
+    <input class="field-input" id="newPinInput" maxlength="4" inputmode="numeric" placeholder="0000">
+    <button class="btn-primary" id="savePinBtn">Save PIN</button>
+  </div>
+</div>
+
+<!-- Delete confirm sheet -->
+<div class="sheet-overlay" id="deleteConfirmOverlay">
+  <div class="sheet">
+    <h3>Delete பண்ணலாமா?</h3>
+    <p style="font-size:13.5px;color:#9999b0;" id="deleteConfirmText">இது நிரந்தரமா delete ஆகிடும்.</p>
+    <button class="btn-primary" style="background:#e74c3c;" id="confirmDeleteBtn">Delete</button>
+    <button class="btn-secondary" id="cancelDeleteBtn">Cancel</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
