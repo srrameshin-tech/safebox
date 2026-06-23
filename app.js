@@ -359,20 +359,38 @@ document.getElementById("vaMove").addEventListener("click", () => {
 document.getElementById("vaShare").addEventListener("click", () => {
   const code = genCode();
   const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
-  appState.shares[code] = { fileId: currentViewerFileId, expiresAt };
-  saveShares();
-  document.getElementById("shareCodeDisplay").textContent = code;
-  document.getElementById("shareExpiryText").textContent = "24 மணி நேரத்துக்கு valid";
-  document.getElementById("copyShareCodeBtn").dataset.code = code;
-  document.getElementById("copyShareLinkBtn").dataset.code = code;
-  openSheet("shareSheetOverlay");
+  const fileIdAtShareTime = currentViewerFileId;
+  // Write directly to this share's path only (not the whole shares tree) to avoid clobbering other shares
+  db.ref(ROOT + "/shares/" + code).set({ fileId: fileIdAtShareTime, expiresAt })
+    .then(() => {
+      appState.shares[code] = { fileId: fileIdAtShareTime, expiresAt };
+      document.getElementById("shareCodeDisplay").textContent = code;
+      document.getElementById("shareExpiryText").textContent = "24 மணி நேரத்துக்கு valid";
+      document.getElementById("copyShareCodeBtn").dataset.code = code;
+      document.getElementById("copyShareLinkBtn").dataset.code = code;
+      openSheet("shareSheetOverlay");
+    })
+    .catch(err => {
+      console.error("Share save failed:", err);
+      toast("Share code create ஆகல, மறுபடி try பண்ணுங்க");
+    });
 });
 document.getElementById("copyShareCodeBtn").addEventListener("click", e => {
-  navigator.clipboard?.writeText(e.target.dataset.code).then(() => toast("Code copy ஆச்சு"));
+  const code = e.target.dataset.code;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(code).then(() => toast("Code copy ஆச்சு")).catch(() => toast("Code: " + code));
+  } else {
+    toast("Code: " + code);
+  }
 });
 document.getElementById("copyShareLinkBtn").addEventListener("click", e => {
-  const link = `${location.origin}${location.pathname}?share=${e.target.dataset.code}`;
-  navigator.clipboard?.writeText(link).then(() => toast("Link copy ஆச்சு"));
+  const code = e.target.dataset.code;
+  const link = `${location.origin}${location.pathname}?share=${code}`;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(link).then(() => toast("Link copy ஆச்சு")).catch(() => toast("Link: " + link));
+  } else {
+    toast("Link: " + link);
+  }
 });
 document.getElementById("closeShareSheetBtn").addEventListener("click", () => closeSheet("shareSheetOverlay"));
 
@@ -636,31 +654,102 @@ document.getElementById("folderBackBtn").addEventListener("click", () => {
 });
 
 // ============ SHARE LINK HANDLING (incoming) ============
+let pendingShareFile = null; // file object waiting to be revealed after correct code entry
+let pendingShareCode = "";  // the correct code for this share
+let enteredShareCode = "";
+
 function checkIncomingShareLink() {
   const params = new URLSearchParams(location.search);
   const code = params.get("share");
   if (!code) return false;
+
   const share = appState.shares[code];
   if (!share || share.expiresAt < Date.now()) {
-    document.getElementById("loginSub").textContent = "இந்த link expire ஆகிடுச்சு";
-    return false;
+    // Show an expired/invalid message on the share-access screen itself
+    showScreen("shareAccessScreen");
+    document.getElementById("shareAccessSub").textContent = "இந்த link expire ஆகிடுச்சு அல்லது invalid";
+    document.querySelectorAll("#shareAccessKeypad .key").forEach(b => b.style.visibility = "hidden");
+    return true;
   }
   const f = appState.files[share.fileId];
-  if (!f) return false;
-  // Show shared file directly without requiring PIN
-  document.getElementById("loginScreen").classList.remove("active");
-  showScreen("viewerScreen");
-  document.getElementById("viewerFname").textContent = f.name;
-  document.querySelectorAll(".viewer-actions .vaction").forEach(b => b.style.display = "none");
-  const body = document.getElementById("viewerBody");
+  if (!f) {
+    showScreen("shareAccessScreen");
+    document.getElementById("shareAccessSub").textContent = "இந்த file கிடைக்கல";
+    document.querySelectorAll("#shareAccessKeypad .key").forEach(b => b.style.visibility = "hidden");
+    return true;
+  }
+
+  // Valid share - require the code to be typed before revealing
+  pendingShareFile = f;
+  pendingShareCode = code;
+  enteredShareCode = "";
+  buildShareAccessKeypad();
+  renderShareAccessDots();
+  showScreen("shareAccessScreen");
+  return true;
+}
+
+function buildShareAccessKeypad() {
+  const keypad = document.getElementById("shareAccessKeypad");
+  keypad.innerHTML = "";
+  const keys = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
+  keys.forEach(k => {
+    const btn = document.createElement("button");
+    btn.className = "key" + (k === "" ? " empty" : "");
+    btn.textContent = k;
+    if (k !== "") {
+      btn.addEventListener("click", () => handleShareAccessKeyPress(k));
+    }
+    keypad.appendChild(btn);
+  });
+}
+
+function handleShareAccessKeyPress(k) {
+  if (k === "⌫") {
+    enteredShareCode = enteredShareCode.slice(0, -1);
+  } else if (enteredShareCode.length < 4) {
+    enteredShareCode += k;
+  }
+  renderShareAccessDots();
+  if (enteredShareCode.length === 4) {
+    setTimeout(checkShareAccessCode, 150);
+  }
+}
+
+function renderShareAccessDots(errorState = false) {
+  const dots = document.querySelectorAll("#shareAccessDots .pin-dot");
+  dots.forEach((d, i) => {
+    d.classList.remove("filled", "error");
+    if (errorState) d.classList.add("error");
+    else if (i < enteredShareCode.length) d.classList.add("filled");
+  });
+}
+
+function checkShareAccessCode() {
+  if (enteredShareCode === pendingShareCode) {
+    document.getElementById("shareAccessError").textContent = "";
+    revealSharedFile(pendingShareFile);
+  } else {
+    renderShareAccessDots(true);
+    document.getElementById("shareAccessError").textContent = "தவறான code, மீண்டும் முயற்சி செய்யுங்க";
+    setTimeout(() => {
+      enteredShareCode = "";
+      renderShareAccessDots();
+    }, 500);
+  }
+}
+
+function revealSharedFile(f) {
+  document.getElementById("sharedViewerFname").textContent = f.name;
+  const body = document.getElementById("sharedViewerBody");
   if (f.type === "image") {
     body.innerHTML = `<img src="${f.data}" alt="${escapeHtml(f.name)}">`;
   } else {
     body.innerHTML = `<div class="doc-preview"><div class="bigicon">📄</div><p>${escapeHtml(f.name)}</p></div>`;
   }
-  document.getElementById("viewerBackBtn").style.display = "none";
-  return true;
+  showScreen("viewerScreenShared");
 }
+
 
 // ============ INIT ============
 buildKeypad();

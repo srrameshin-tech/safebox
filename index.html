@@ -24,6 +24,7 @@
 
   /* ===== LOGIN ===== */
   #loginScreen { align-items: center; justify-content: center; padding: 24px; background: linear-gradient(160deg, #1a1a2e 0%, #0f0f1a 60%); }
+  #shareAccessScreen { align-items: center; justify-content: center; padding: 24px; background: linear-gradient(160deg, #1a1a2e 0%, #0f0f1a 60%); }
   .login-box { width: 100%; max-width: 340px; text-align: center; }
   .lock-icon { font-size: 56px; margin-bottom: 8px; }
   .login-box h1 { font-size: 26px; font-weight: 700; margin-bottom: 4px; letter-spacing: 0.5px; }
@@ -188,6 +189,28 @@
     <div class="file-grid" id="folderFileGrid"></div>
   </div>
   <button class="fab" id="fabUploadInFolder">+</button>
+</div>
+
+<!-- ===================== SHARE ACCESS CODE SCREEN ===================== -->
+<div id="shareAccessScreen" class="screen">
+  <div class="login-box" style="margin: auto; padding: 24px;">
+    <div class="lock-icon">🔗</div>
+    <h1>Shared File</h1>
+    <p class="sub" id="shareAccessSub">4-digit access code-ஐ உள்ளிடவும்</p>
+    <div class="pin-dots" id="shareAccessDots">
+      <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+    </div>
+    <div class="keypad" id="shareAccessKeypad"></div>
+    <div class="login-error" id="shareAccessError"></div>
+  </div>
+</div>
+
+<!-- ===================== SHARED FILE VIEWER (read-only, post access-code) ===================== -->
+<div id="viewerScreenShared" class="screen" style="background:#000;">
+  <div class="viewer-top">
+    <span class="fname-top" id="sharedViewerFname">file</span>
+  </div>
+  <div class="viewer-body" id="sharedViewerBody"></div>
 </div>
 
 <!-- ===================== VIEWER SCREEN ===================== -->
