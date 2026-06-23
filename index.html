@@ -25,6 +25,7 @@
   /* ===== LOGIN ===== */
   #loginScreen { align-items: center; justify-content: center; padding: 24px; background: linear-gradient(160deg, #1a1a2e 0%, #0f0f1a 60%); }
   #shareAccessScreen { align-items: center; justify-content: center; padding: 24px; background: linear-gradient(160deg, #1a1a2e 0%, #0f0f1a 60%); }
+  #folderPinScreen { align-items: center; justify-content: center; padding: 24px; background: linear-gradient(160deg, #1a1a2e 0%, #0f0f1a 60%); }
   .login-box { width: 100%; max-width: 340px; text-align: center; }
   .lock-icon { font-size: 56px; margin-bottom: 8px; }
   .login-box h1 { font-size: 26px; font-weight: 700; margin-bottom: 4px; letter-spacing: 0.5px; }
@@ -66,6 +67,7 @@
   .folder-card .fname { font-size: 14.5px; font-weight: 600; }
   .folder-card .fcount { font-size: 12px; color: #8888a0; }
   .folder-card .fcolor { position: absolute; top: 0; left: 0; right: 0; height: 4px; border-radius: 16px 16px 0 0; }
+  .folder-card .flock-badge { position: absolute; top: 10px; right: 10px; font-size: 13px; opacity: 0.85; }
   .add-folder-card { background: transparent; border: 1.5px dashed #2e2e4a; border-radius: 16px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 6px; color: #6c5ce7; font-size: 13px; min-height: 92px; }
 
   .fab { position: fixed; bottom: 26px; right: 20px; width: 58px; height: 58px; border-radius: 50%; background: #6c5ce7; color: #fff; font-size: 28px; border: none; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 18px rgba(108,92,231,0.5); z-index: 40; }
@@ -205,9 +207,18 @@
   </div>
 </div>
 
+<!-- ===================== SHARED FOLDER VIEWER (read-only, post access-code) ===================== -->
+<div id="sharedFolderScreen" class="screen">
+  <div class="appbar">
+    <h2 id="sharedFolderTitle">Folder</h2>
+  </div>
+  <div class="file-grid" id="sharedFolderGrid" style="padding-bottom: 40px;"></div>
+</div>
+
 <!-- ===================== SHARED FILE VIEWER (read-only, post access-code) ===================== -->
 <div id="viewerScreenShared" class="screen" style="background:#000;">
   <div class="viewer-top">
+    <button class="icon-btn back-btn" id="sharedViewerBackBtn" style="display:none;">←</button>
     <span class="fname-top" id="sharedViewerFname">file</span>
   </div>
   <div class="viewer-body" id="sharedViewerBody"></div>
@@ -262,12 +273,39 @@
   </div>
 </div>
 
-<!-- Folder menu sheet (rename/delete folder) -->
+<!-- Folder menu sheet (rename/delete/lock/share folder) -->
 <div class="sheet-overlay" id="folderMenuSheetOverlay">
   <div class="sheet">
     <h3 id="folderMenuTitle">Folder</h3>
     <div class="sheet-row" id="renameFolderRow"><span class="sricon">✏️</span><span>Folder பெயர் மாற்று</span></div>
+    <div class="sheet-row" id="lockFolderRow"><span class="sricon">🔒</span><span id="lockFolderLabel">Folder-க்கு PIN வை</span></div>
+    <div class="sheet-row" id="shareFolderRow"><span class="sricon">🔗</span><span>Folder Share பண்ணு</span></div>
     <div class="sheet-row danger" id="deleteFolderRow"><span class="sricon">🗑️</span><span>Folder Delete பண்ணு</span></div>
+  </div>
+</div>
+
+<!-- Set folder PIN sheet -->
+<div class="sheet-overlay" id="setFolderPinSheetOverlay">
+  <div class="sheet">
+    <h3>Folder PIN வை</h3>
+    <div class="field-label">4-digit PIN</div>
+    <input class="field-input" id="setFolderPinInput" maxlength="4" inputmode="numeric" placeholder="0000">
+    <button class="btn-primary" id="saveFolderPinBtn">PIN Save பண்ணு</button>
+  </div>
+</div>
+
+<!-- Folder PIN entry screen (when opening a locked folder) -->
+<div id="folderPinScreen" class="screen">
+  <div class="login-box" style="margin: auto; padding: 24px;">
+    <div class="lock-icon">🔒</div>
+    <h1 id="folderPinTitle">Folder</h1>
+    <p class="sub">இந்த folder-க்கு PIN போடவும்</p>
+    <div class="pin-dots" id="folderPinDots">
+      <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+    </div>
+    <div class="keypad" id="folderPinKeypad"></div>
+    <div class="login-error" id="folderPinError"></div>
+    <button class="btn-secondary" id="folderPinBackBtn" style="margin-top:24px;">← Home-க்கு போ</button>
   </div>
 </div>
 

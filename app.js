@@ -208,6 +208,7 @@ function renderFolderGrid() {
     card.className = "folder-card";
     card.innerHTML = `
       <div class="fcolor" style="background:${f.color}"></div>
+      ${f.pin ? '<div class="flock-badge">🔒</div>' : ''}
       <div class="ficon">${f.icon}</div>
       <div class="fname">${escapeHtml(f.name)}</div>
       <div class="fcount">${fileCountInFolder(id)} files</div>
@@ -229,13 +230,82 @@ function escapeHtml(s) {
 }
 
 // ============ FOLDER DETAIL ============
+let pendingOpenFolderId = null;
+
 function openFolder(folderId) {
-  currentFolderId = folderId;
   const f = appState.folders[folderId];
+  if (f.pin) {
+    // Locked folder - require PIN entry first
+    pendingOpenFolderId = folderId;
+    enteredFolderPin = "";
+    document.getElementById("folderPinTitle").textContent = f.name;
+    document.getElementById("folderPinError").textContent = "";
+    buildFolderPinKeypad();
+    renderFolderPinDots();
+    showScreen("folderPinScreen");
+    return;
+  }
+  currentFolderId = folderId;
   document.getElementById("folderTitle").textContent = f.name;
   renderFolderFiles();
   showScreen("folderScreen");
 }
+
+let enteredFolderPin = "";
+function buildFolderPinKeypad() {
+  const keypad = document.getElementById("folderPinKeypad");
+  keypad.innerHTML = "";
+  const keys = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
+  keys.forEach(k => {
+    const btn = document.createElement("button");
+    btn.className = "key" + (k === "" ? " empty" : "");
+    btn.textContent = k;
+    if (k !== "") btn.addEventListener("click", () => handleFolderPinKeyPress(k));
+    keypad.appendChild(btn);
+  });
+}
+function handleFolderPinKeyPress(k) {
+  if (k === "⌫") {
+    enteredFolderPin = enteredFolderPin.slice(0, -1);
+  } else if (enteredFolderPin.length < 4) {
+    enteredFolderPin += k;
+  }
+  renderFolderPinDots();
+  if (enteredFolderPin.length === 4) {
+    setTimeout(checkFolderPin, 150);
+  }
+}
+function renderFolderPinDots(errorState = false) {
+  const dots = document.querySelectorAll("#folderPinDots .pin-dot");
+  dots.forEach((d, i) => {
+    d.classList.remove("filled", "error");
+    if (errorState) d.classList.add("error");
+    else if (i < enteredFolderPin.length) d.classList.add("filled");
+  });
+}
+function checkFolderPin() {
+  const f = appState.folders[pendingOpenFolderId];
+  if (enteredFolderPin === f.pin) {
+    enteredFolderPin = "";
+    currentFolderId = pendingOpenFolderId;
+    pendingOpenFolderId = null;
+    document.getElementById("folderTitle").textContent = f.name;
+    renderFolderFiles();
+    showScreen("folderScreen");
+  } else {
+    renderFolderPinDots(true);
+    document.getElementById("folderPinError").textContent = "தவறான PIN";
+    setTimeout(() => {
+      enteredFolderPin = "";
+      renderFolderPinDots();
+    }, 500);
+  }
+}
+document.getElementById("folderPinBackBtn").addEventListener("click", () => {
+  pendingOpenFolderId = null;
+  enteredFolderPin = "";
+  showScreen("homeScreen");
+});
 
 function renderFolderFiles() {
   const grid = document.getElementById("folderFileGrid");
@@ -356,7 +426,11 @@ document.getElementById("vaMove").addEventListener("click", () => {
   openSheet("moveSheetOverlay");
 });
 
+let pendingShareMode = "file"; // "file" or "folder"
+let pendingShareFolderId = null;
+
 document.getElementById("vaShare").addEventListener("click", () => {
+  pendingShareMode = "file";
   openSheet("shareExpirySheetOverlay");
 });
 
@@ -364,7 +438,11 @@ document.querySelectorAll("#shareExpirySheetOverlay .sheet-row").forEach(row => 
   row.addEventListener("click", () => {
     const hours = parseInt(row.dataset.hours, 10);
     closeSheet("shareExpirySheetOverlay");
-    createShareWithExpiry(hours);
+    if (pendingShareMode === "folder") {
+      createFolderShareWithExpiry(hours);
+    } else {
+      createShareWithExpiry(hours);
+    }
   });
 });
 
@@ -373,9 +451,9 @@ function createShareWithExpiry(hours) {
   const linkToken = genLinkToken();
   const expiresAt = Date.now() + hours * 60 * 60 * 1000;
   const fileIdAtShareTime = currentViewerFileId;
-  db.ref(ROOT + "/shares/" + linkToken).set({ fileId: fileIdAtShareTime, code, expiresAt })
+  db.ref(ROOT + "/shares/" + linkToken).set({ type: "file", fileId: fileIdAtShareTime, code, expiresAt })
     .then(() => {
-      appState.shares[linkToken] = { fileId: fileIdAtShareTime, code, expiresAt };
+      appState.shares[linkToken] = { type: "file", fileId: fileIdAtShareTime, code, expiresAt };
       document.getElementById("shareCodeDisplay").textContent = code;
       document.getElementById("shareExpiryText").textContent = formatExpiryLabel(hours) + "க்கு valid";
       document.getElementById("copyShareCodeBtn").dataset.code = code;
@@ -384,6 +462,26 @@ function createShareWithExpiry(hours) {
     })
     .catch(err => {
       console.error("Share save failed:", err);
+      toast("Share code create ஆகல, மறுபடி try பண்ணுங்க");
+    });
+}
+
+function createFolderShareWithExpiry(hours) {
+  const code = genCode();
+  const linkToken = genLinkToken();
+  const expiresAt = Date.now() + hours * 60 * 60 * 1000;
+  const folderId = pendingShareFolderId;
+  db.ref(ROOT + "/shares/" + linkToken).set({ type: "folder", folderId, code, expiresAt })
+    .then(() => {
+      appState.shares[linkToken] = { type: "folder", folderId, code, expiresAt };
+      document.getElementById("shareCodeDisplay").textContent = code;
+      document.getElementById("shareExpiryText").textContent = formatExpiryLabel(hours) + "க்கு valid";
+      document.getElementById("copyShareCodeBtn").dataset.code = code;
+      document.getElementById("copyShareLinkBtn").dataset.token = linkToken;
+      openSheet("shareSheetOverlay");
+    })
+    .catch(err => {
+      console.error("Folder share save failed:", err);
       toast("Share code create ஆகல, மறுபடி try பண்ணுங்க");
     });
 }
@@ -467,9 +565,11 @@ document.getElementById("createFolderBtn").addEventListener("click", () => {
   toast("Folder create ஆச்சு");
 });
 
-// ============ FOLDER MENU (rename/delete folder) ============
+// ============ FOLDER MENU (rename/delete/lock/share folder) ============
 document.getElementById("folderMenuBtn").addEventListener("click", () => {
-  document.getElementById("folderMenuTitle").textContent = appState.folders[currentFolderId].name;
+  const f = appState.folders[currentFolderId];
+  document.getElementById("folderMenuTitle").textContent = f.name;
+  document.getElementById("lockFolderLabel").textContent = f.pin ? "Folder PIN-ஐ நீக்கு" : "Folder-க்கு PIN வை";
   openSheet("folderMenuSheetOverlay");
 });
 document.getElementById("renameFolderRow").addEventListener("click", () => {
@@ -497,6 +597,39 @@ document.getElementById("deleteFolderRow").addEventListener("click", () => {
   document.getElementById("deleteConfirmText").textContent = `இந்த folder-ஓட ${count} files-உம் delete ஆகிடும்.`;
   openSheet("deleteConfirmOverlay");
 });
+
+document.getElementById("lockFolderRow").addEventListener("click", () => {
+  closeSheet("folderMenuSheetOverlay");
+  const f = appState.folders[currentFolderId];
+  if (f.pin) {
+    // Remove existing PIN directly
+    delete appState.folders[currentFolderId].pin;
+    saveFolders();
+    renderFolderGrid();
+    toast("Folder PIN நீக்கப்பட்டது");
+  } else {
+    document.getElementById("setFolderPinInput").value = "";
+    openSheet("setFolderPinSheetOverlay");
+  }
+});
+document.getElementById("saveFolderPinBtn").addEventListener("click", () => {
+  const pin = document.getElementById("setFolderPinInput").value.trim();
+  if (!/^\d{4}$/.test(pin)) { toast("4-digit PIN கொடுங்க"); return; }
+  appState.folders[currentFolderId].pin = pin;
+  saveFolders();
+  closeSheet("setFolderPinSheetOverlay");
+  renderFolderGrid();
+  toast("Folder PIN வைக்கப்பட்டது");
+});
+
+document.getElementById("shareFolderRow").addEventListener("click", () => {
+  closeSheet("folderMenuSheetOverlay");
+  pendingShareMode = "folder";
+  pendingShareFolderId = currentFolderId;
+  openSheet("shareExpirySheetOverlay");
+});
+
+
 
 // Patch rename confirm to handle folder-mode too
 const originalRenameHandler = document.getElementById("confirmRenameBtn");
@@ -739,6 +872,8 @@ let pendingShareFile = null; // file object waiting to be revealed after correct
 let pendingShareCode = "";  // the correct code for this share
 let enteredShareCode = "";
 
+let pendingShareData = null; // either a file object or {type:'folder', folder, files}
+
 function checkIncomingShareLink() {
   const params = new URLSearchParams(location.search);
   const token = params.get("s") || params.get("share"); // support old links too during transition
@@ -751,16 +886,28 @@ function checkIncomingShareLink() {
     document.querySelectorAll("#shareAccessKeypad .key").forEach(b => b.style.visibility = "hidden");
     return true;
   }
-  const f = appState.files[share.fileId];
-  if (!f) {
-    showScreen("shareAccessScreen");
-    document.getElementById("shareAccessSub").textContent = "இந்த file கிடைக்கல";
-    document.querySelectorAll("#shareAccessKeypad .key").forEach(b => b.style.visibility = "hidden");
-    return true;
+
+  if (share.type === "folder") {
+    const folder = appState.folders[share.folderId];
+    if (!folder) {
+      showScreen("shareAccessScreen");
+      document.getElementById("shareAccessSub").textContent = "இந்த folder கிடைக்கல";
+      document.querySelectorAll("#shareAccessKeypad .key").forEach(b => b.style.visibility = "hidden");
+      return true;
+    }
+    const filesInFolder = Object.entries(appState.files).filter(([id, f]) => f.folderId === share.folderId);
+    pendingShareData = { type: "folder", folder, files: filesInFolder };
+  } else {
+    const f = appState.files[share.fileId];
+    if (!f) {
+      showScreen("shareAccessScreen");
+      document.getElementById("shareAccessSub").textContent = "இந்த file கிடைக்கல";
+      document.querySelectorAll("#shareAccessKeypad .key").forEach(b => b.style.visibility = "hidden");
+      return true;
+    }
+    pendingShareData = { type: "file", file: f };
   }
 
-  // share.code may be missing on very old links created before this update - fall back to requiring the token itself
-  pendingShareFile = f;
   pendingShareCode = share.code || token;
   enteredShareCode = "";
   buildShareAccessKeypad();
@@ -808,7 +955,11 @@ function renderShareAccessDots(errorState = false) {
 function checkShareAccessCode() {
   if (enteredShareCode === pendingShareCode) {
     document.getElementById("shareAccessError").textContent = "";
-    revealSharedFile(pendingShareFile);
+    if (pendingShareData.type === "folder") {
+      revealSharedFolder(pendingShareData.folder, pendingShareData.files);
+    } else {
+      revealSharedFile(pendingShareData.file);
+    }
   } else {
     renderShareAccessDots(true);
     document.getElementById("shareAccessError").textContent = "தவறான code, மீண்டும் முயற்சி செய்யுங்க";
@@ -827,7 +978,42 @@ function revealSharedFile(f) {
   } else {
     body.innerHTML = `<div class="doc-preview"><div class="bigicon">📄</div><p>${escapeHtml(f.name)}</p></div>`;
   }
+  const backBtn = document.getElementById("sharedViewerBackBtn");
+  if (pendingShareData && pendingShareData.type === "folder") {
+    backBtn.style.display = "flex";
+  } else {
+    backBtn.style.display = "none";
+  }
   showScreen("viewerScreenShared");
+}
+document.getElementById("sharedViewerBackBtn").addEventListener("click", () => {
+  if (pendingShareData && pendingShareData.type === "folder") {
+    showScreen("sharedFolderScreen");
+  }
+});
+
+function revealSharedFolder(folder, filesEntries) {
+  document.getElementById("sharedFolderTitle").textContent = folder.name;
+  const grid = document.getElementById("sharedFolderGrid");
+  grid.innerHTML = "";
+  if (filesEntries.length === 0) {
+    grid.innerHTML = `<div style="grid-column:1/-1;" class="empty-state"><div class="eicon">📂</div><p>இந்த folder-ல files இல்ல.</p></div>`;
+  } else {
+    filesEntries.sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0));
+    filesEntries.forEach(([id, f]) => {
+      const tile = document.createElement("div");
+      if (f.type === "image") {
+        tile.className = "file-tile";
+        tile.innerHTML = `<img src="${f.data}" alt="${escapeHtml(f.name)}">`;
+      } else {
+        tile.className = "file-tile doc-tile";
+        tile.innerHTML = `<div class="dicon">📄</div><div class="dname">${escapeHtml(f.name)}</div>`;
+      }
+      tile.addEventListener("click", () => revealSharedFile(f));
+      grid.appendChild(tile);
+    });
+  }
+  showScreen("sharedFolderScreen");
 }
 
 
