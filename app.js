@@ -22,7 +22,7 @@ let currentViewerFileId = null;
 let pendingUploadFolderId = null;
 let pendingDeleteAction = null;
 
-const STORAGE_LIMIT_BYTES = 1 * 1024 * 1024 * 1024; // 1GB Spark free limit
+const STORAGE_LIMIT_BYTES = 10 * 1024 * 1024 * 1024; // 10GB R2 free tier
 const WARN_THRESHOLD = 0.75; // warn at 75%
 const DANGER_THRESHOLD = 0.9;
 
@@ -243,7 +243,7 @@ function computeUsedBytes() {
 function renderStorageMeter() {
   const used = computeUsedBytes();
   const pct = Math.min(100, (used / STORAGE_LIMIT_BYTES) * 100);
-  document.getElementById("storageText").textContent = `${formatBytes(used)} / 1 GB`;
+  document.getElementById("storageText").textContent = `${formatBytes(used)} / 10 GB`;
   const fill = document.getElementById("storageBarFill");
   fill.style.width = pct + "%";
   const warn = document.getElementById("storageWarning");
