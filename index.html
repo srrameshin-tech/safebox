@@ -250,14 +250,17 @@
     <h3>Upload</h3>
     <div id="uploadChooseStage">
       <div class="sheet-row" id="chooseFolderRow"><span class="sricon">📁</span><span id="chooseFolderLabel">Folder: Photos</span></div>
-      <div class="sheet-row" id="pickPhotoRow"><span class="sricon">🖼️</span><span>Photo எடு / Choose Photo</span></div>
+      <div class="sheet-row" id="pickPhotoRow"><span class="sricon">🖼️</span><span>Photos தேர்வு செய் (multiple)</span></div>
+      <div class="sheet-row" id="pickVideoRow"><span class="sricon">🎥</span><span>Video தேர்வு செய்</span></div>
       <div class="sheet-row" id="pickDocRow"><span class="sricon">📄</span><span>Document தேர்வு செய்</span></div>
     </div>
     <div id="uploadProgressStage" class="upload-progress hidden">
       <div class="spinner"></div>
       <p id="uploadProgressText">Uploading...</p>
+      <p id="uploadProgressCount" style="font-size:12px;color:#8888a0;margin-top:6px;"></p>
     </div>
-    <input type="file" id="filePhotoInput" accept="image/*">
+    <input type="file" id="filePhotoInput" accept="image/*" multiple>
+    <input type="file" id="fileVideoInput" accept="video/*">
     <input type="file" id="fileDocInput" accept=".pdf,.doc,.docx,.txt,image/*">
   </div>
 </div>

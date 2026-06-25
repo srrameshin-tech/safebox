@@ -423,13 +423,17 @@ function buildFileTile(id, f) {
   if (f.type === "image") {
     tile.className = "file-tile";
     tile.innerHTML = `<div class="thumb-loading">⏳</div>`;
-    if (f.r2key) {
-      r2Fetch(f.r2key).then(url => {
+    const keyToFetch = f.r2thumbkey || f.r2key;
+    if (keyToFetch) {
+      r2Fetch(keyToFetch).then(url => {
         tile.innerHTML = `<img src="${url}" alt="${escapeHtml(f.name)}">`;
       }).catch(() => {
         tile.innerHTML = `<div class="dicon">⚠️</div>`;
       });
     }
+  } else if (f.type === "video") {
+    tile.className = "file-tile doc-tile";
+    tile.innerHTML = `<div class="dicon">🎥</div><div class="dname">${escapeHtml(f.name)}</div>`;
   } else {
     tile.className = "file-tile doc-tile";
     tile.innerHTML = `<div class="dicon">📄</div><div class="dname">${escapeHtml(f.name)}</div>`;
@@ -478,6 +482,15 @@ function openViewer(fileId) {
         body.innerHTML = `<div class="doc-preview"><div class="bigicon">⚠️</div><p>Load ஆகல, மறுபடி try பண்ணுங்க</p></div>`;
       });
     }
+  } else if (f.type === "video") {
+    body.innerHTML = `<div class="doc-preview"><div class="bigicon">⏳</div></div>`;
+    if (f.r2key) {
+      r2Fetch(f.r2key).then(url => {
+        body.innerHTML = `<video src="${url}" controls playsinline style="max-width:100%;max-height:100%;"></video>`;
+      }).catch(() => {
+        body.innerHTML = `<div class="doc-preview"><div class="bigicon">⚠️</div><p>Load ஆகல, மறுபடி try பண்ணுங்க</p></div>`;
+      });
+    }
   } else {
     body.innerHTML = `<div class="doc-preview"><div class="bigicon">📄</div><p>${escapeHtml(f.name)}</p><p style="font-size:12px;color:#888;margin-top:8px;">${formatBytes(f.size||0)}</p></div>`;
   }
@@ -493,6 +506,7 @@ document.getElementById("vaDelete").addEventListener("click", () => {
   pendingDeleteAction = () => {
     const f = appState.files[currentViewerFileId];
     const r2key = f && f.r2key;
+    const r2thumbkey = f && f.r2thumbkey;
     delete appState.files[currentViewerFileId];
     saveFiles();
     renderFolderFiles();
@@ -501,6 +515,7 @@ document.getElementById("vaDelete").addEventListener("click", () => {
     showScreen("folderScreen");
     toast("File delete ஆச்சு");
     if (r2key) r2Delete(r2key).catch(err => console.error("R2 delete failed:", err));
+    if (r2thumbkey) r2Delete(r2thumbkey).catch(err => console.error("R2 thumb delete failed:", err));
   };
   document.getElementById("deleteConfirmText").textContent = "இந்த file நிரந்தரமா delete ஆகிடும்.";
   openSheet("deleteConfirmOverlay");
@@ -703,6 +718,7 @@ document.getElementById("deleteFolderRow").addEventListener("click", () => {
     Object.keys(appState.files).forEach(fid => {
       if (appState.files[fid].folderId === currentFolderId) {
         if (appState.files[fid].r2key) r2keysToDelete.push(appState.files[fid].r2key);
+        if (appState.files[fid].r2thumbkey) r2keysToDelete.push(appState.files[fid].r2thumbkey);
         delete appState.files[fid];
       }
     });
@@ -810,12 +826,23 @@ document.getElementById("chooseFolderRow").addEventListener("click", () => {
 });
 
 document.getElementById("pickPhotoRow").addEventListener("click", () => document.getElementById("filePhotoInput").click());
+document.getElementById("pickVideoRow").addEventListener("click", () => document.getElementById("fileVideoInput").click());
 document.getElementById("pickDocRow").addEventListener("click", () => document.getElementById("fileDocInput").click());
 
 document.getElementById("filePhotoInput").addEventListener("change", e => {
-  const file = e.target.files[0];
-  if (file) handlePhotoUpload(file);
+  const files = Array.from(e.target.files || []);
   e.target.value = "";
+  if (files.length === 0) return;
+  if (files.length === 1) {
+    handlePhotoUpload(files[0]);
+  } else {
+    handleMultiplePhotoUpload(files);
+  }
+});
+document.getElementById("fileVideoInput").addEventListener("change", e => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (file) handleVideoUpload(file);
 });
 document.getElementById("fileDocInput").addEventListener("change", e => {
   const file = e.target.files[0];
@@ -823,17 +850,104 @@ document.getElementById("fileDocInput").addEventListener("change", e => {
   e.target.value = "";
 });
 
-function showUploadProgress(text) {
+function showUploadProgress(text, countText) {
   document.getElementById("uploadChooseStage").classList.add("hidden");
   document.getElementById("uploadProgressStage").classList.remove("hidden");
   document.getElementById("uploadProgressText").textContent = text;
+  document.getElementById("uploadProgressCount").textContent = countText || "";
 }
 
 function handlePhotoUpload(file) {
   showUploadProgress("Photo compress ஆகுது...");
-  compressImage(file, 1280, 0.72, (blob, sizeBytes) => {
-    finalizeUpload(file.name, "image", blob, sizeBytes, "image/jpeg");
+  compressImageBoth(file, (mainBlob, mainSize, thumbBlob) => {
+    finalizeUpload(file.name, "image", mainBlob, mainSize, "image/jpeg", thumbBlob);
   });
+}
+
+// Compresses once for the main viewer image (1280px) and once for a small thumbnail (320px),
+// reusing the same loaded <img> so we only decode the source file once.
+function compressImageBoth(file, cb) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      const mainCanvas = resizeToCanvas(img, 1280);
+      const thumbCanvas = resizeToCanvas(img, 320);
+      mainCanvas.toBlob(mainBlob => {
+        thumbCanvas.toBlob(thumbBlob => {
+          cb(mainBlob, mainBlob.size, thumbBlob);
+        }, "image/jpeg", 0.6);
+      }, "image/jpeg", 0.72);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function resizeToCanvas(img, maxDim) {
+  let { width, height } = img;
+  if (width > maxDim || height > maxDim) {
+    if (width > height) { height = Math.round(height * maxDim / width); width = maxDim; }
+    else { width = Math.round(width * maxDim / height); height = maxDim; }
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = width; canvas.height = height;
+  canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+  return canvas;
+}
+
+async function handleMultiplePhotoUpload(files) {
+  showUploadProgress("Photos upload ஆகுது...", `0 / ${files.length}`);
+  let successCount = 0;
+  let failCount = 0;
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    document.getElementById("uploadProgressCount").textContent = `${i + 1} / ${files.length}`;
+    try {
+      const { mainBlob, sizeBytes, thumbBlob } = await new Promise((resolve, reject) => {
+        compressImageBoth(file, (mb, s, tb) => resolve({ mainBlob: mb, sizeBytes: s, thumbBlob: tb }));
+      });
+      const used = computeUsedBytes();
+      if (used + sizeBytes > STORAGE_LIMIT_BYTES) {
+        failCount++;
+        continue; // storage full, skip remaining accounting but keep trying smaller ones is unnecessary; just count as failed
+      }
+      const r2key = genR2Key();
+      const r2thumbkey = genR2Key();
+      await r2Upload(r2key, mainBlob, "image/jpeg");
+      await r2Upload(r2thumbkey, thumbBlob, "image/jpeg");
+      const id = "file_" + Date.now() + "_" + Math.floor(Math.random() * 10000) + "_" + i;
+      appState.files[id] = {
+        name: file.name, type: "image", r2key, r2thumbkey, size: sizeBytes,
+        folderId: pendingUploadFolderId, createdAt: Date.now()
+      };
+      successCount++;
+    } catch (err) {
+      console.error("Multi-upload item failed:", err);
+      failCount++;
+    }
+  }
+  saveFiles();
+  closeSheet("uploadSheetOverlay");
+  renderStorageMeter();
+  renderFolderGrid();
+  if (currentFolderId) renderFolderFiles();
+  if (failCount === 0) {
+    toast(`${successCount} photos upload ஆச்சு ✓`);
+  } else {
+    toast(`${successCount} upload ஆச்சு, ${failCount} fail ஆச்சு`);
+  }
+}
+
+function handleVideoUpload(file) {
+  const maxSize = 50 * 1024 * 1024; // 50MB cap for videos
+  if (file.size > maxSize) {
+    toast("Video 50MB-க்கு மேல இருக்கு, கம்மி duration video try பண்ணுங்க");
+    closeSheet("uploadSheetOverlay");
+    return;
+  }
+  showUploadProgress("Video upload ஆகுது...");
+  finalizeUpload(file.name, "video", file, file.size, file.type || "video/mp4");
 }
 
 function compressImage(file, maxDim, quality, cb) {
@@ -896,7 +1010,7 @@ document.getElementById("cancelLargeDocBtn").addEventListener("click", () => {
   pendingLargeDocFile = null;
 });
 
-function finalizeUpload(name, type, blob, sizeBytes, contentType) {
+function finalizeUpload(name, type, blob, sizeBytes, contentType, thumbBlob) {
   const used = computeUsedBytes();
   if (used + sizeBytes > STORAGE_LIMIT_BYTES) {
     toast("⚠️ Storage full! Files delete பண்ணி try பண்ணுங்க");
@@ -905,13 +1019,17 @@ function finalizeUpload(name, type, blob, sizeBytes, contentType) {
   }
   showUploadProgress("R2-க்கு upload ஆகுது...");
   const r2key = genR2Key();
-  r2Upload(r2key, blob, contentType)
+  const r2thumbkey = thumbBlob ? genR2Key() : null;
+  const uploads = [r2Upload(r2key, blob, contentType)];
+  if (thumbBlob) uploads.push(r2Upload(r2thumbkey, thumbBlob, "image/jpeg"));
+  Promise.all(uploads)
     .then(() => {
       const id = "file_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
       appState.files[id] = {
         name, type, r2key, size: sizeBytes,
         folderId: pendingUploadFolderId, createdAt: Date.now()
       };
+      if (r2thumbkey) appState.files[id].r2thumbkey = r2thumbkey;
       saveFiles();
       closeSheet("uploadSheetOverlay");
       renderStorageMeter();
@@ -1136,6 +1254,15 @@ function revealSharedFile(f) {
         body.innerHTML = `<div class="doc-preview"><div class="bigicon">⚠️</div><p>Load ஆகல</p></div>`;
       });
     }
+  } else if (f.type === "video") {
+    body.innerHTML = `<div class="doc-preview"><div class="bigicon">⏳</div></div>`;
+    if (f.r2key) {
+      r2Fetch(f.r2key).then(url => {
+        body.innerHTML = `<video src="${url}" controls playsinline style="max-width:100%;max-height:100%;"></video>`;
+      }).catch(() => {
+        body.innerHTML = `<div class="doc-preview"><div class="bigicon">⚠️</div><p>Load ஆகல</p></div>`;
+      });
+    }
   } else {
     body.innerHTML = `<div class="doc-preview"><div class="bigicon">📄</div><p>${escapeHtml(f.name)}</p></div>`;
   }
@@ -1166,13 +1293,17 @@ function revealSharedFolder(folder, filesEntries) {
       if (f.type === "image") {
         tile.className = "file-tile";
         tile.innerHTML = `<div class="thumb-loading">⏳</div>`;
-        if (f.r2key) {
-          r2Fetch(f.r2key).then(url => {
+        const keyToFetch = f.r2thumbkey || f.r2key;
+        if (keyToFetch) {
+          r2Fetch(keyToFetch).then(url => {
             tile.innerHTML = `<img src="${url}" alt="${escapeHtml(f.name)}">`;
           }).catch(() => {
             tile.innerHTML = `<div class="dicon">⚠️</div>`;
           });
         }
+      } else if (f.type === "video") {
+        tile.className = "file-tile doc-tile";
+        tile.innerHTML = `<div class="dicon">🎥</div><div class="dname">${escapeHtml(f.name)}</div>`;
       } else {
         tile.className = "file-tile doc-tile";
         tile.innerHTML = `<div class="dicon">📄</div><div class="dname">${escapeHtml(f.name)}</div>`;
