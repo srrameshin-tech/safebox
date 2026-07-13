@@ -1242,6 +1242,20 @@ function checkShareAccessCode() {
   }
 }
 
+document.addEventListener('keydown', (e) => {
+  if (!(e.key >= '0' && e.key <= '9') && e.key !== 'Backspace') return;
+  const isDigit = e.key >= '0' && e.key <= '9';
+  const active = document.querySelector('.screen.active');
+  if (!active) return;
+  if (active.id === 'loginScreen') {
+    isDigit ? handleKeyPress(e.key) : handleKeyPress('⌫');
+  } else if (active.id === 'folderPinScreen') {
+    isDigit ? handleFolderPinKeyPress(e.key) : handleFolderPinKeyPress('⌫');
+  } else if (active.id === 'shareAccessScreen') {
+    isDigit ? handleShareAccessKeyPress(e.key) : handleShareAccessKeyPress('⌫');
+  }
+});
+
 function revealSharedFile(f) {
   document.getElementById("sharedViewerFname").textContent = f.name;
   const body = document.getElementById("sharedViewerBody");
