@@ -107,6 +107,21 @@ function estimateBase64Bytes(str) {
 }
 
 // ============ LOGIN / PIN ============
+// Attach both touchend (instant, no mobile tap-delay) and click (fallback for
+// mouse/desktop), guarding against the click firing a second time after touch.
+function attachKeyTap(btn, handler) {
+  let touched = false;
+  btn.addEventListener("touchend", (e) => {
+    touched = true;
+    e.preventDefault();
+    handler();
+    setTimeout(() => { touched = false; }, 400);
+  });
+  btn.addEventListener("click", () => {
+    if (touched) return;
+    handler();
+  });
+}
 function buildKeypad() {
   const keypad = document.getElementById("keypad");
   keypad.innerHTML = "";
@@ -116,7 +131,7 @@ function buildKeypad() {
     btn.className = "key" + (k === "" ? " empty" : "");
     btn.textContent = k;
     if (k !== "") {
-      btn.addEventListener("click", () => handleKeyPress(k));
+      attachKeyTap(btn, () => handleKeyPress(k));
     }
     keypad.appendChild(btn);
   });
@@ -334,7 +349,7 @@ function buildFolderPinKeypad() {
     const btn = document.createElement("button");
     btn.className = "key" + (k === "" ? " empty" : "");
     btn.textContent = k;
-    if (k !== "") btn.addEventListener("click", () => handleFolderPinKeyPress(k));
+    if (k !== "") attachKeyTap(btn, () => handleFolderPinKeyPress(k));
     keypad.appendChild(btn);
   });
 }
@@ -1197,7 +1212,7 @@ function buildShareAccessKeypad() {
     btn.className = "key" + (k === "" ? " empty" : "");
     btn.textContent = k;
     if (k !== "") {
-      btn.addEventListener("click", () => handleShareAccessKeyPress(k));
+      attachKeyTap(btn, () => handleShareAccessKeyPress(k));
     }
     keypad.appendChild(btn);
   });
