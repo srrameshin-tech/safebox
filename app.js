@@ -109,6 +109,19 @@ function estimateBase64Bytes(str) {
 // ============ LOGIN / PIN ============
 // Attach both touchend (instant, no mobile tap-delay) and click (fallback for
 // mouse/desktop), guarding against the click firing a second time after touch.
+// PIN hashing (SHA-256) — auto-migrates legacy plaintext PINs on next successful use
+async function sha256Hex(str) {
+  const enc = new TextEncoder().encode(str);
+  const buf = await crypto.subtle.digest("SHA-256", enc);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+function isHashFormat(str) { return typeof str === "string" && /^[a-f0-9]{64}$/i.test(str); }
+async function verifyPin(entered, stored) {
+  if (!stored) return false;
+  if (isHashFormat(stored)) return (await sha256Hex(entered)) === stored;
+  return entered === stored; // legacy plaintext fallback
+}
+
 function attachKeyTap(btn, handler) {
   let touched = false;
   btn.addEventListener("touchend", (e) => {
@@ -158,9 +171,14 @@ function renderPinDots(errorState = false) {
   });
 }
 
-function checkPin() {
-  if (enteredPin === appState.pin) {
+async function checkPin() {
+  const ok = await verifyPin(enteredPin, appState.pin);
+  if (ok) {
     document.getElementById("loginError").textContent = "";
+    if (!isHashFormat(appState.pin)) {
+      appState.pin = await sha256Hex(enteredPin); // auto-migrate legacy plaintext to hash
+      savePin();
+    }
     enteredPin = "";
     showScreen("homeScreen");
     renderHome();
@@ -184,7 +202,7 @@ document.getElementById("forgotPinLink").addEventListener("click", () => {
 document.getElementById("cancelRecoveryBtn").addEventListener("click", () => {
   closeSheet("forgotPinSheetOverlay");
 });
-document.getElementById("confirmRecoveryBtn").addEventListener("click", () => {
+document.getElementById("confirmRecoveryBtn").addEventListener("click", async () => {
   const code = document.getElementById("recoveryCodeInput").value.trim();
   const newPin = document.getElementById("recoveryNewPinInput").value.trim();
   if (code.toUpperCase() !== MASTER_PIN_RECOVERY_CODE) {
@@ -195,7 +213,7 @@ document.getElementById("confirmRecoveryBtn").addEventListener("click", () => {
     document.getElementById("recoveryError").textContent = "4-digit PIN கொடுங்க";
     return;
   }
-  appState.pin = newPin;
+  appState.pin = await sha256Hex(newPin);
   savePin();
   closeSheet("forgotPinSheetOverlay");
   toast("PIN reset ஆச்சு, புது PIN-ஐ போடுங்க");
@@ -372,9 +390,14 @@ function renderFolderPinDots(errorState = false) {
     else if (i < enteredFolderPin.length) d.classList.add("filled");
   });
 }
-function checkFolderPin() {
+async function checkFolderPin() {
   const f = appState.folders[pendingOpenFolderId];
-  if (enteredFolderPin === f.pin) {
+  const ok = await verifyPin(enteredFolderPin, f.pin);
+  if (ok) {
+    if (!isHashFormat(f.pin)) {
+      f.pin = await sha256Hex(enteredFolderPin); // auto-migrate legacy plaintext to hash
+      saveFolders();
+    }
     enteredFolderPin = "";
     currentFolderId = pendingOpenFolderId;
     pendingOpenFolderId = null;
@@ -404,9 +427,10 @@ document.getElementById("folderPinForgotLink").addEventListener("click", () => {
 document.getElementById("cancelMasterPinForFolderBtn").addEventListener("click", () => {
   closeSheet("folderPinForgotSheetOverlay");
 });
-document.getElementById("confirmMasterPinForFolderBtn").addEventListener("click", () => {
+document.getElementById("confirmMasterPinForFolderBtn").addEventListener("click", async () => {
   const entered = document.getElementById("masterPinForFolderInput").value.trim();
-  if (entered !== appState.pin) {
+  const ok = await verifyPin(entered, appState.pin);
+  if (!ok) {
     document.getElementById("masterPinForFolderError").textContent = "தவறான Master PIN";
     return;
   }
@@ -764,10 +788,10 @@ document.getElementById("lockFolderRow").addEventListener("click", () => {
     openSheet("setFolderPinSheetOverlay");
   }
 });
-document.getElementById("saveFolderPinBtn").addEventListener("click", () => {
+document.getElementById("saveFolderPinBtn").addEventListener("click", async () => {
   const pin = document.getElementById("setFolderPinInput").value.trim();
   if (!/^\d{4}$/.test(pin)) { toast("4-digit PIN கொடுங்க"); return; }
-  appState.folders[currentFolderId].pin = pin;
+  appState.folders[currentFolderId].pin = await sha256Hex(pin);
   saveFolders();
   closeSheet("setFolderPinSheetOverlay");
   renderFolderGrid();
@@ -1067,10 +1091,10 @@ document.getElementById("changePinRow").addEventListener("click", () => {
   document.getElementById("newPinInput").value = "";
   openSheet("changePinSheetOverlay");
 });
-document.getElementById("savePinBtn").addEventListener("click", () => {
+document.getElementById("savePinBtn").addEventListener("click", async () => {
   const newPin = document.getElementById("newPinInput").value.trim();
   if (!/^\d{4}$/.test(newPin)) { toast("4-digit PIN கொடுங்க"); return; }
-  appState.pin = newPin;
+  appState.pin = await sha256Hex(newPin);
   savePin();
   closeSheet("changePinSheetOverlay");
   toast("PIN மாறிடுச்சு");
