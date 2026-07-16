@@ -35,7 +35,7 @@
   .pin-dot.filled { background: #6c5ce7; border-color: #6c5ce7; }
   .pin-dot.error { border-color: #e74c3c; background: #e74c3c; }
   .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; max-width: 280px; margin: 0 auto; }
-  .key { aspect-ratio: 1; border-radius: 50%; background: #1f1f33; border: 1px solid #2a2a42; color: #eaeaf0; font-size: 22px; font-weight: 500; display: flex; align-items: center; justify-content: center; }
+  .key { aspect-ratio: 1; border-radius: 50%; background: #1f1f33; border: 1px solid #2a2a42; color: #eaeaf0; font-size: 22px; font-weight: 500; display: flex; align-items: center; justify-content: center; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
   .key:active { background: #2a2a48; }
   .key.empty { background: transparent; border: none; }
   .login-error { color: #e74c3c; font-size: 13px; margin-top: 14px; min-height: 18px; }
