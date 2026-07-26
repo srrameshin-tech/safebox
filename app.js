@@ -7,6 +7,75 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
+// ---------------- AUTO CHECK: background error/crash logger ----------------
+let errorLogQueue = [];
+let errorLogFlushTimer = null;
+function logAppError(type, message, extra){
+  try{
+    const entry = { type:type, message:String(message||'').slice(0,500), extra:extra?String(extra).slice(0,800):'', time:Date.now(), ua:navigator.userAgent.slice(0,200), page:location.pathname };
+    errorLogQueue.push(entry);
+    if(errorLogFlushTimer) clearTimeout(errorLogFlushTimer);
+    errorLogFlushTimer = setTimeout(flushErrorLogQueue, 1500);
+  }catch(e){}
+}
+function flushErrorLogQueue(){
+  if(!errorLogQueue.length) return;
+  const batch = errorLogQueue.splice(0, errorLogQueue.length);
+  batch.forEach(function(entry){ try{ db.ref('errorLogs').push(entry); }catch(e){} });
+}
+window.addEventListener('error', function(e){ logAppError('JS Error', e.message, (e.filename||'')+':'+(e.lineno||'')+' '+(e.error&&e.error.stack?e.error.stack.slice(0,400):'')); });
+window.addEventListener('unhandledrejection', function(e){ const r=e.reason; logAppError('Unhandled Promise', r&&r.message?r.message:String(r), r&&r.stack?r.stack.slice(0,400):''); });
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='hidden') flushErrorLogQueue(); });
+
+const AUTO_CHECK_INTERVAL_MS = 3*24*60*60*1000;
+function runAutoCheckDigest(){
+  try{
+    const lastCheck = Number(localStorage.getItem('autoCheck_lastReview')||0);
+    if(Date.now()-lastCheck < AUTO_CHECK_INTERVAL_MS) return;
+    db.ref('errorLogs').once('value').then(function(snap){
+      const all = snap.val()||{};
+      const unresolved = Object.entries(all).filter(function(x){ return !x[1].seen; });
+      localStorage.setItem('autoCheck_lastReview', String(Date.now()));
+      if(unresolved.length===0) return;
+      showAutoCheckPopup(unresolved);
+    }).catch(function(){});
+  }catch(e){}
+}
+function showAutoCheckPopup(entries){
+  const groups={};
+  entries.forEach(function(x){
+    const id=x[0], e=x[1];
+    const key=(e.type||'Error')+': '+(e.message||'');
+    if(!groups[key]) groups[key]={count:0,first:e.time,last:e.time,extra:e.extra,ids:[]};
+    groups[key].count++; groups[key].first=Math.min(groups[key].first,e.time); groups[key].last=Math.max(groups[key].last,e.time); groups[key].ids.push(id);
+  });
+  const lines=Object.entries(groups).map(function(kv){
+    const key=kv[0], g=kv[1];
+    return '• '+key+'\n   ('+g.count+'x, last: '+new Date(g.last).toLocaleString()+')'+(g.extra?'\n   ↳ '+g.extra:'');
+  });
+  const fullText = 'Auto Check — '+entries.length+' issue(s) found in last 3 days:\n\n'+lines.join('\n\n');
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  overlay.innerHTML='<div style="background:#1a1a1a;color:#fff;border-radius:16px;padding:20px;max-width:480px;width:100%;max-height:80vh;display:flex;flex-direction:column;font-family:sans-serif;">'+
+    '<h3 style="margin:0 0 12px;color:#FF5C5C;">⚠️ Auto Check — '+entries.length+' issue(s) found</h3>'+
+    '<pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;background:#000;padding:12px;border-radius:10px;overflow-y:auto;flex:1;margin:0 0 14px;">'+fullText.replace(/</g,'&lt;')+'</pre>'+
+    '<div style="display:flex;gap:10px;">'+
+    '<button id="acCopyBtn" style="flex:1;padding:12px;border:none;border-radius:10px;background:#FFC800;color:#000;font-weight:700;">📋 Copy</button>'+
+    '<button id="acCloseBtn" style="flex:1;padding:12px;border:none;border-radius:10px;background:#333;color:#fff;font-weight:700;">Mark reviewed & close</button>'+
+    '</div></div>';
+  document.body.appendChild(overlay);
+  overlay.querySelector('#acCopyBtn').addEventListener('click', function(){
+    const btn=this;
+    navigator.clipboard.writeText(fullText).then(function(){ btn.textContent='Copied ✓'; }).catch(function(){ btn.textContent='Copy failed'; });
+  });
+  overlay.querySelector('#acCloseBtn').addEventListener('click', function(){
+    const allIds=[]; Object.values(groups).forEach(function(g){ g.ids.forEach(function(id){ allIds.push(id); }); });
+    allIds.forEach(function(id){ try{ db.ref('errorLogs/'+id).update({seen:true}); }catch(e){} });
+    overlay.remove();
+  });
+}
+setTimeout(runAutoCheckDigest, 2500);
+
 const ROOT = "safebox"; // separate namespace from other apps in same project
 
 // ============ STATE ============
