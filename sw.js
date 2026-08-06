@@ -1,4 +1,4 @@
-const CACHE_NAME = "safebox-v10";
+const CACHE_NAME = "safebox-v11";
 const ASSETS = ["./", "./index.html", "./app.js", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {
@@ -18,7 +18,11 @@ self.addEventListener("activate", e => {
 
 self.addEventListener("fetch", e => {
   // Never intercept Firebase calls
-  if (e.request.url.includes("firebaseio.com") || e.request.url.includes("googleapis.com")) {
+  if (e.request.url.includes("firebaseio.com") ||
+      e.request.url.includes("firebasedatabase.app") ||
+      e.request.url.includes("googleapis.com") ||
+      e.request.url.includes("gstatic.com") ||
+      e.request.url.includes("workers.dev")) {
     return;
   }
   // Network-first for our own app shell files (html/js) so updates show up immediately
