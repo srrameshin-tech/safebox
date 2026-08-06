@@ -291,25 +291,38 @@ document.getElementById("confirmRecoveryBtn").addEventListener("click", async ()
 });
 
 // ============ DATA LOADING ============
+let dataLoadedOk = false;
+
 function loadData(callback) {
   db.ref(ROOT).once("value").then(snap => {
     const val = snap.val();
+    dataLoadedOk = true;
     if (val) {
       appState.pin = val.pin || "1973";
       appState.folders = val.folders || {};
       appState.files = val.files || {};
       appState.shares = val.shares || {};
+      // Node exists but has no folders: leave it alone. Seeding here would
+      // overwrite whatever else is already stored under it.
+      if (Object.keys(appState.folders).length === 0 && !val.files && !val.shares) {
+        seedDefaultFolders();
+      }
     } else {
-      // First run - seed default folders
-      seedDefaultFolders();
-    }
-    if (Object.keys(appState.folders).length === 0) {
+      // Genuinely empty, confirmed by a successful read - safe to seed.
       seedDefaultFolders();
     }
     callback && callback();
   }).catch(err => {
-    console.error(err);
-    toast("Connection error, retry பண்ணுங்க");
+    // Never seed or save after a failed read. The data is still on the server.
+    dataLoadedOk = false;
+    console.error("[safebox] load failed", err);
+    try { logAppError("SafeBox load fail", err && err.message ? err.message : String(err)); } catch (e) {}
+    const denied = String((err && (err.code || err.message)) || "").toLowerCase().indexOf("permission") >= 0;
+    if (denied) {
+      showAdminLogin();
+    } else {
+      toast("\u0b87\u0ba3\u0bc8\u0baa\u0bcd\u0baa\u0bc1 \u0b95\u0bbf\u0b9f\u0bc8\u0b95\u0bcd\u0b95\u0bb5\u0bbf\u0bb2\u0bcd\u0bb2\u0bc8, \u0bae\u0bc0\u0ba3\u0bcd\u0b9f\u0bc1\u0bae\u0bcd \u0bae\u0bc1\u0baf\u0bb1\u0bcd\u0b9a\u0bbf\u0b95\u0bcd\u0b95\u0bb5\u0bc1\u0bae\u0bcd");
+    }
     callback && callback();
   });
 }
@@ -1446,12 +1459,92 @@ function revealSharedFolder(folder, filesEntries) {
 }
 
 
+// ============ ADMIN AUTH ============
+// Firebase rules now allow /safebox only for the owner account, so the app
+// must sign in before it can read anything. The session persists on device.
+function sbAuthMsg(kind, text) {
+  const el = document.getElementById("sbAuthMsg");
+  if (!el) return;
+  const c = kind === "err"
+    ? ["rgba(255,68,68,.1)", "rgba(255,68,68,.3)", "#ff8080"]
+    : ["rgba(162,155,254,.1)", "rgba(162,155,254,.3)", "#a29bfe"];
+  el.style.display = "block";
+  el.style.background = c[0];
+  el.style.border = "1px solid " + c[1];
+  el.style.color = c[2];
+  el.textContent = text;
+}
+
+function showAdminLogin() {
+  const ov = document.getElementById("sbAuthOv");
+  if (ov) ov.style.display = "flex";
+}
+function hideAdminLogin() {
+  const ov = document.getElementById("sbAuthOv");
+  if (ov) ov.style.display = "none";
+}
+
+function sbAuthErrorText(code) {
+  switch (code) {
+    case "auth/invalid-email":          return "\u0bae\u0bbf\u0ba9\u0bcd\u0ba9\u0b9e\u0bcd\u0b9a\u0bb2\u0bcd \u0bae\u0bc1\u0b95\u0bb5\u0bb0\u0bbf \u0b9a\u0bb0\u0bbf\u0baf\u0bbf\u0bb2\u0bcd\u0bb2\u0bc8.";
+    case "auth/user-not-found":
+    case "auth/wrong-password":
+    case "auth/invalid-credential":     return "\u0bae\u0bbf\u0ba9\u0bcd\u0ba9\u0b9e\u0bcd\u0b9a\u0bb2\u0bcd \u0b85\u0bb2\u0bcd\u0bb2\u0ba4\u0bc1 \u0b95\u0b9f\u0bb5\u0bc1\u0b9a\u0bcd\u0b9a\u0bca\u0bb2\u0bcd \u0b9a\u0bb0\u0bbf\u0baf\u0bbf\u0bb2\u0bcd\u0bb2\u0bc8.";
+    case "auth/too-many-requests":      return "\u0baa\u0bb2 \u0bae\u0bc1\u0bb1\u0bc8 \u0ba4\u0bb5\u0bb1\u0bbe\u0b95 \u0bae\u0bc1\u0baf\u0ba9\u0bcd\u0bb1\u0bc1\u0bb5\u0bbf\u0b9f\u0bcd\u0b9f\u0bc0\u0bb0\u0bcd\u0b95\u0bb3\u0bcd. \u0b9a\u0bbf\u0bb1\u0bbf\u0ba4\u0bc1 \u0ba8\u0bc7\u0bb0\u0bae\u0bcd \u0b95\u0bb4\u0bbf\u0ba4\u0bcd\u0ba4\u0bc1 \u0bae\u0bc1\u0baf\u0bb1\u0bcd\u0b9a\u0bbf\u0b95\u0bcd\u0b95\u0bb5\u0bc1\u0bae\u0bcd.";
+    case "auth/network-request-failed": return "\u0b87\u0ba3\u0bc8\u0baa\u0bcd\u0baa\u0bc1 \u0b95\u0bbf\u0b9f\u0bc8\u0b95\u0bcd\u0b95\u0bb5\u0bbf\u0bb2\u0bcd\u0bb2\u0bc8. \u0bae\u0bc0\u0ba3\u0bcd\u0b9f\u0bc1\u0bae\u0bcd \u0bae\u0bc1\u0baf\u0bb1\u0bcd\u0b9a\u0bbf\u0b95\u0bcd\u0b95\u0bb5\u0bc1\u0bae\u0bcd.";
+    default:                            return "\u0b87\u0baa\u0bcd\u0baa\u0bcb\u0ba4\u0bc1 \u0b89\u0bb3\u0bcd\u0ba8\u0bc1\u0bb4\u0bc8\u0baf \u0bae\u0bc1\u0b9f\u0bbf\u0baf\u0bb5\u0bbf\u0bb2\u0bcd\u0bb2\u0bc8. \u0b9a\u0bbf\u0bb1\u0bbf\u0ba4\u0bc1 \u0ba8\u0bc7\u0bb0\u0bae\u0bcd \u0b95\u0bb4\u0bbf\u0ba4\u0bcd\u0ba4\u0bc1 \u0bae\u0bc1\u0baf\u0bb1\u0bcd\u0b9a\u0bbf\u0b95\u0bcd\u0b95\u0bb5\u0bc1\u0bae\u0bcd.";
+  }
+}
+
+let sbBooted = false;
+function sbBoot() {
+  if (sbBooted) return;
+  sbBooted = true;
+  loadData(() => { checkIncomingShareLink(); });
+}
+
+async function sbDoLogin() {
+  const btn = document.getElementById("sbAuthGo");
+  const email = (document.getElementById("sbAuthEmail").value || "").trim();
+  const pass = document.getElementById("sbAuthPass").value || "";
+  if (email.indexOf("@") < 1) { sbAuthMsg("err", sbAuthErrorText("auth/invalid-email")); return; }
+  if (pass.length < 6) { sbAuthMsg("err", sbAuthErrorText("auth/wrong-password")); return; }
+
+  btn.disabled = true;
+  const label = btn.textContent;
+  btn.textContent = "...";
+  try {
+    await firebase.auth().signInWithEmailAndPassword(email, pass);
+    document.getElementById("sbAuthPass").value = "";
+    hideAdminLogin();
+    sbBooted = false;
+    sbBoot();
+  } catch (e) {
+    console.warn("[safebox] sign-in failed", e && e.code);
+    sbAuthMsg("err", sbAuthErrorText(e && e.code));
+  }
+  btn.disabled = false;
+  btn.textContent = label;
+}
+
 // ============ INIT ============
 buildKeypad();
-loadData(() => {
-  if (!checkIncomingShareLink()) {
-    // normal flow - wait at login screen
+
+document.getElementById("sbAuthGo").addEventListener("click", sbDoLogin);
+document.getElementById("sbAuthPass").addEventListener("keydown", function (e) {
+  if (e.key === "Enter") sbDoLogin();
+});
+
+firebase.auth().onAuthStateChanged(function (user) {
+  if (user && user.isAnonymous === false && user.email) {
+    hideAdminLogin();
+    sbBoot();
+  } else {
+    showAdminLogin();
   }
+}, function (err) {
+  console.warn("[safebox] auth listener failed", err);
+  showAdminLogin();
 });
 
 // Sheet overlay click-outside-to-close
