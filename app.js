@@ -97,29 +97,65 @@ const DANGER_THRESHOLD = 0.9;
 
 const FOLDER_ICONS = ["📁","📄","🆔","🏠","💳","🩺","🚗","🎓","🧾","⚖️","🖼️","📜"];
 const FOLDER_COLORS = ["#6c5ce7","#00b894","#e17055","#0984e3","#d63031","#fdcb6e","#a29bfe","#00cec9"];
-const MASTER_PIN_RECOVERY_CODE = "SAFEBOX1973"; // case-insensitive secret recovery code
+// The PIN is a convenience lock on top of the Firebase login, not the real gate.
+// Recovery now re-checks the Firebase account instead of a code kept in source.
 
 // ============ R2 STORAGE (via Cloudflare Worker) ============
 const R2_WORKER_URL = "https://safebox-worker.srrameshin.workers.dev";
-const R2_AUTH_TOKEN = "safebox-secret-2026";
+
+// The worker verifies a Firebase ID token, so there is no secret to hide here.
+// Tokens last an hour; getIdToken(true) forces a fresh one after a rejection.
+async function r2AuthHeader(forceRefresh) {
+  const user = firebase.auth().currentUser;
+  if (!user) throw new Error("not signed in");
+  const token = await user.getIdToken(!!forceRefresh);
+  return "Bearer " + token;
+}
+
+// One silent retry with a fresh token, then give up. Nothing alarming shown.
+async function r2Request(key, init, label) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let auth;
+    try {
+      auth = await r2AuthHeader(attempt === 1);
+    } catch (e) {
+      console.warn("[r2] no session for " + label, e.message);
+      throw new Error(label + " failed");
+    }
+    const opts = Object.assign({}, init);
+    opts.headers = Object.assign({}, init.headers || {}, { Authorization: auth });
+
+    let res;
+    try {
+      res = await fetch(R2_WORKER_URL + "/" + encodeURIComponent(key), opts);
+    } catch (netErr) {
+      console.warn("[r2] " + label + " network error", netErr);
+      if (attempt === 1) throw new Error(label + " failed");
+      continue;
+    }
+    if (res.ok) return res;
+    console.warn("[r2] " + label + " -> HTTP " + res.status);
+    if (res.status === 401 && attempt === 0) continue;
+    const err = new Error(label + " failed");
+    err.status = res.status;
+    throw err;
+  }
+  throw new Error(label + " failed");
+}
 const blobUrlCache = {}; // r2Key -> local blob URL, so we don't re-fetch the same file repeatedly
 
 async function r2Upload(key, blob, contentType) {
-  const res = await fetch(`${R2_WORKER_URL}/${encodeURIComponent(key)}`, {
+  const res = await r2Request(key, {
     method: "PUT",
-    headers: { "X-Auth-Token": R2_AUTH_TOKEN, "Content-Type": contentType || "application/octet-stream" },
+    headers: { "Content-Type": contentType || "application/octet-stream" },
     body: blob,
-  });
-  if (!res.ok) throw new Error("Upload failed: " + res.status);
+  }, "Upload");
   return res.json();
 }
 
 async function r2Fetch(key) {
   if (blobUrlCache[key]) return blobUrlCache[key];
-  const res = await fetch(`${R2_WORKER_URL}/${encodeURIComponent(key)}`, {
-    headers: { "X-Auth-Token": R2_AUTH_TOKEN },
-  });
-  if (!res.ok) throw new Error("Fetch failed: " + res.status);
+  const res = await r2Request(key, { method: "GET" }, "Fetch");
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   blobUrlCache[key] = url;
@@ -127,11 +163,7 @@ async function r2Fetch(key) {
 }
 
 async function r2Delete(key) {
-  const res = await fetch(`${R2_WORKER_URL}/${encodeURIComponent(key)}`, {
-    method: "DELETE",
-    headers: { "X-Auth-Token": R2_AUTH_TOKEN },
-  });
-  if (!res.ok) throw new Error("Delete failed: " + res.status);
+  const res = await r2Request(key, { method: "DELETE" }, "Delete");
   delete blobUrlCache[key];
   return res.json();
 }
@@ -272,22 +304,50 @@ document.getElementById("cancelRecoveryBtn").addEventListener("click", () => {
   closeSheet("forgotPinSheetOverlay");
 });
 document.getElementById("confirmRecoveryBtn").addEventListener("click", async () => {
-  const code = document.getElementById("recoveryCodeInput").value.trim();
+  const pass = document.getElementById("recoveryCodeInput").value;
   const newPin = document.getElementById("recoveryNewPinInput").value.trim();
-  if (code.toUpperCase() !== MASTER_PIN_RECOVERY_CODE) {
-    document.getElementById("recoveryError").textContent = "தவறான recovery code";
-    return;
-  }
+  const errEl = document.getElementById("recoveryError");
+  const btn = document.getElementById("confirmRecoveryBtn");
+
   if (!/^\d{4}$/.test(newPin)) {
-    document.getElementById("recoveryError").textContent = "4-digit PIN கொடுங்க";
+    errEl.textContent = "4-digit PIN கொடுங்க";
     return;
   }
+
+  const user = firebase.auth().currentUser;
+  if (!user || !user.email) {
+    errEl.textContent = "முதல்ல login பண்ணுங்க";
+    return;
+  }
+  if (!pass) {
+    errEl.textContent = "உங்க account password கொடுங்க";
+    return;
+  }
+
+  btn.disabled = true;
+  const label = btn.textContent;
+  btn.textContent = "...";
+  try {
+    // Proving the account password is what authorises a PIN reset.
+    const cred = firebase.auth.EmailAuthProvider.credential(user.email, pass);
+    await user.reauthenticateWithCredential(cred);
+  } catch (e) {
+    console.warn("[safebox] reauth failed", e && e.code);
+    errEl.textContent = "Password சரியில்ல";
+    btn.disabled = false;
+    btn.textContent = label;
+    return;
+  }
+
   appState.pin = await sha256Hex(newPin);
   savePin();
+  document.getElementById("recoveryCodeInput").value = "";
   closeSheet("forgotPinSheetOverlay");
   toast("PIN reset ஆச்சு, புது PIN-ஐ போடுங்க");
   enteredPin = "";
   renderPinDots();
+  btn.disabled = false;
+  btn.textContent = label;
 });
 
 // ============ DATA LOADING ============
