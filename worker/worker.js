@@ -11,6 +11,8 @@
  * A Firebase ID token cannot be forged and it expires in one hour, so nothing
  * useful is left sitting in the public source.
  *
+ * Deployed from the safebox repo (worker/ directory) via Cloudflare Workers Builds.
+ *
  * Routes (unchanged, so the app keeps working the same way):
  *   PUT    /<key>   upload
  *   GET    /<key>   download
