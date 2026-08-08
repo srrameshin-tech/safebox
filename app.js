@@ -1588,6 +1588,16 @@ async function sbDoLogin() {
 }
 
 // ============ INIT ============
+// Show the real build stamp, read straight from the meta tag, so the label on
+// screen can never drift from what is actually deployed.
+(function showBuild() {
+  try {
+    const m = document.querySelector('meta[name="app-build"]');
+    const el = document.getElementById("buildLabel");
+    if (m && el) el.textContent = "v" + m.getAttribute("content");
+  } catch (e) { console.warn("[safebox] build label failed", e); }
+})();
+
 buildKeypad();
 
 document.getElementById("sbAuthGo").addEventListener("click", sbDoLogin);
