@@ -1,0 +1,7 @@
+name = "safebox-worker"
+main = "worker.js"
+compatibility_date = "2026-06-01"
+
+[[r2_buckets]]
+binding = "SAFEBOX_BUCKET"
+bucket_name = "safebox-files"
