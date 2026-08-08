@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="app-build" content="20260808-1058">
 <title>SafeBox v2</title>
 <meta name="theme-color" content="#1a1a2e">
 <link rel="manifest" href="manifest.json">
@@ -406,8 +407,8 @@
 <div class="sheet-overlay" id="forgotPinSheetOverlay">
   <div class="sheet">
     <h3>PIN Recovery</h3>
-    <div class="field-label">Secret recovery code</div>
-    <input class="field-input" id="recoveryCodeInput" placeholder="Recovery code">
+    <div class="field-label">உங்க account password</div>
+    <input class="field-input" type="password" id="recoveryCodeInput" placeholder="Password" autocomplete="current-password">
     <div class="field-label">புது 4-digit PIN</div>
     <input class="field-input" id="recoveryNewPinInput" maxlength="4" inputmode="numeric" placeholder="0000">
     <button class="btn-primary" id="confirmRecoveryBtn">PIN Reset பண்ணு</button>
@@ -469,6 +470,6 @@
     </button>
   </div>
 </div>
-<script src="app.js"></script>
+<script src="app.js?v=20260808-1058"></script>
 </body>
 </html>
